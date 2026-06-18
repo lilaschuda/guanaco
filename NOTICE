@@ -1,0 +1,20 @@
+Guanaco
+Copyright 2026 Cristián Felipe Varas Schuda
+
+This product includes software developed by The Apache Software Foundation
+(https://www.apache.org/) as part of Apache Camel (https://camel.apache.org/),
+licensed under the Apache License, Version 2.0.
+
+Guanaco depends on Apache Camel at runtime but does not include, modify, or
+redistribute any portion of the Apache Camel source code or binaries as part
+of this repository.
+
+Guanaco is an independent project and is not affiliated with, endorsed by,
+or sponsored by The Apache Software Foundation. "Apache," "Camel," "Apache
+Camel," and the Apache feather logo are trademarks of The Apache Software
+Foundation. Their use here is solely to accurately describe Guanaco's
+relationship to, and dependency on, the Apache Camel project.
+
+The contents of this NOTICE file are for informational purposes only and
+do not modify the License under which Guanaco is distributed. See LICENSE
+for the full terms.

@@ -1,0 +1,13 @@
+framework:
+  validation: PERMISSIVE
+
+routes:
+  OrderProcessor:
+    from: direct:orders
+    bindings:
+      ToInventory:  mock:inventory
+      ToPayment:    mock:payment
+      ToFraudCheck: mock:fraud
+    errorHandler:
+      deadLetter: mock:deadletter
+      maxRetries: 3
