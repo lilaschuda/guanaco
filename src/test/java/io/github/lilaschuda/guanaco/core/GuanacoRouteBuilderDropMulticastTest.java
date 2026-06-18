@@ -1,4 +1,4 @@
-package org.guanaco.core;
+package io.github.lilaschuda.guanaco.core;
 
 import io.github.lilaschuda.guanaco.core.RouteOutcome;
 import io.github.lilaschuda.guanaco.core.GuanacoRouteBuilder;

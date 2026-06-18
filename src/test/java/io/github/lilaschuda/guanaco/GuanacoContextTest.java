@@ -1,4 +1,4 @@
-package org.guanaco;
+package io.github.lilaschuda.guanaco;
 
 import java.util.Set;
 import org.apache.camel.ProducerTemplate;
@@ -8,7 +8,7 @@ import org.junit.jupiter.api.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import io.github.lilaschuda.guanaco.core.RouteOutcome;
-import org.guanaco.example.OrderRoute;
+import io.github.lilaschuda.guanaco.example.OrderRoute;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,7 +28,7 @@ class GuanacoContextTest {
     @BeforeEach
     void setUp() throws Exception {
         log.info("Setting up test...");
-        guanacoContext = new GuanacoContext("org.guanaco.example");
+        guanacoContext = new GuanacoContext("io.github.lilaschuda.guanaco.example");
         ApplicationContext ctx = new StaticApplicationContext();
         guanacoContext.setApplicationContext(ctx);
         guanacoContext.wireRoutes();
@@ -97,7 +97,7 @@ class GuanacoContextTest {
         var inspector = new io.github.lilaschuda.guanaco.core.TopologyInspector();
 
         Set<Class<? extends RouteOutcome<?>>> outcomes
-                = inspector.extractRouteOutcomes(org.guanaco.example.OrderProcessor.class);
+                = inspector.extractRouteOutcomes(io.github.lilaschuda.guanaco.example.OrderProcessor.class);
 
         assertThat(outcomes)
                 .allSatisfy(outcomeClass -> {

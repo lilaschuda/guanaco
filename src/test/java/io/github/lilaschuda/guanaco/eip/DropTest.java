@@ -1,4 +1,4 @@
-package org.guanaco.eip;
+package io.github.lilaschuda.guanaco.eip;
 
 import io.github.lilaschuda.guanaco.eip.Drop;
 import io.github.lilaschuda.guanaco.core.RouteOutcome;

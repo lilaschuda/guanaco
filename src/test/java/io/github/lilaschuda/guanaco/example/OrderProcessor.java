@@ -1,4 +1,4 @@
-package org.guanaco.example;
+package io.github.lilaschuda.guanaco.example;
 
 import org.apache.camel.Exchange;
 import io.github.lilaschuda.guanaco.annotation.GuanacoRoute;
