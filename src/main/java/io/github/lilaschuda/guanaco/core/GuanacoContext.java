@@ -3,7 +3,6 @@ package io.github.lilaschuda.guanaco.core;
 import io.github.lilaschuda.guanaco.config.ConfigLoader;
 import io.github.lilaschuda.guanaco.config.GuanacoConfig;
 import io.github.lilaschuda.guanaco.config.RouteConfig;
-import org.apache.camel.impl.DefaultCamelContext;
 import io.github.lilaschuda.guanaco.annotation.GuanacoRoute;
 import io.github.lilaschuda.guanaco.dsl.Processor;
 import org.reflections.Reflections;
