@@ -1,5 +1,8 @@
 package io.github.lilaschuda.guanaco.config;
 
+import com.fasterxml.jackson.annotation.JsonSetter;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -18,14 +21,14 @@ import java.util.Map;
 public class RouteConfig {
 
     private String from;
-    private Map<String, String> bindings;
+    private Map<String, List<String>> bindings = new LinkedHashMap<>();
     private ErrorHandlerConfig errorHandler;
 
     public String getFrom() { return from; }
     public void setFrom(String from) { this.from = from; }
 
-    public Map<String, String> getBindings() { return bindings; }
-    public void setBindings(Map<String, String> bindings) { this.bindings = bindings; }
+    public Map<String, List<String>> getBindings() { return bindings; }
+    //public void setBindings(Map<String, String> bindings) { this.bindings = bindings; }
 
     public ErrorHandlerConfig getErrorHandler() { return errorHandler; }
     public void setErrorHandler(ErrorHandlerConfig errorHandler) { this.errorHandler = errorHandler; }
@@ -39,5 +42,28 @@ public class RouteConfig {
 
         public int getMaxRetries() { return maxRetries; }
         public void setMaxRetries(int maxRetries) { this.maxRetries = maxRetries; }
+    }
+    
+    /**
+     * Flexible deserialization engine: Normalizes both standalone strings 
+     * and YAML arrays into a unified, clean List structural format.
+     */
+    @JsonSetter("bindings")
+    @SuppressWarnings("unchecked")
+    public void setBindings(Map<String, Object> rawBindings) {
+        this.bindings = new LinkedHashMap<>();
+        if (rawBindings == null) return;
+
+        for (Map.Entry<String, Object> entry : rawBindings.entrySet()) {
+            Object value = entry.getValue();
+            
+            if (value instanceof List) {
+                // It's already a YAML list block
+                this.bindings.put(entry.getKey(), (List<String>) value);
+            } else if (value != null) {
+                // Coerce standalone scalar strings into a single-element list wrapper
+                this.bindings.put(entry.getKey(), List.of(value.toString()));
+            }
+        }
     }
 }

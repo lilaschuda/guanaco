@@ -2,6 +2,7 @@ package io.github.lilaschuda.guanaco.core;
 
 import io.github.lilaschuda.guanaco.config.GuanacoConfig.ValidationMode;
 import io.github.lilaschuda.guanaco.config.RouteConfig;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +40,7 @@ public class BindingValidator {
      * @param routeConfig the parsed YAML config for this processor
      */
     public void validate(String processorName, Set<String> declaredOutcomes, RouteConfig routeConfig) {
-        Map<String, String> bindings = routeConfig.getBindings();
+        Map<String, List<String>> bindings = routeConfig.getBindings();
 
         if (bindings == null || bindings.isEmpty()) {
             String msg = String.format(

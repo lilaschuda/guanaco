@@ -13,6 +13,7 @@ import java.util.Map;
 import org.apache.camel.ProducerTemplate;
 import io.github.lilaschuda.guanaco.eip.Drop;
 import io.github.lilaschuda.guanaco.eip.Multicast;
+import java.util.List;
 
 /**
  * Generates a Camel {@link RouteBuilder} from a guanaco {@link Processor} and
@@ -41,7 +42,7 @@ public class GuanacoRouteBuilder extends RouteBuilder {
     private final RouteConfig config;
     private final String processorName;
     private ProducerTemplate producerTemplate;
-    
+
     @SuppressWarnings("unchecked")
     public GuanacoRouteBuilder(
             Processor<? extends RouteOutcome<?>> processorInstance,
@@ -56,7 +57,7 @@ public class GuanacoRouteBuilder extends RouteBuilder {
 
     @Override
     public void configure() throws Exception {
-        Map<String, String> bindings = config.getBindings();
+        Map<String, List<String>> bindings = config.getBindings();
 
         producerTemplate = getContext().createProducerTemplate();
 
@@ -89,18 +90,40 @@ public class GuanacoRouteBuilder extends RouteBuilder {
 
                     // Multicast — fan out synchronously to each destination, short-circuit before choice()
                     if (outcome instanceof Multicast m) {
-                        log.debug("[{}] Multicast — fanning out to {} destination(s)",
+                        log.debug("[{}] Multicast — fanning out to {} business outcome(s)",
                                 processorName, m.destinations().size());
+
                         for (RouteOutcome<?> dest : m.destinations()) {
-                            String endpoint = bindings.get(dest.getClass().getSimpleName());
-                            if (endpoint != null) {
-                                producerTemplate.sendBody(endpoint, dest.body());
-                                log.debug("[{}] Multicast → {}", processorName, endpoint);
+                            // Fix: Retrieve the List<String> instead of a single String
+                            List<String> endpoints = bindings.get(dest.getClass().getSimpleName());
+
+                            if (endpoints != null && !endpoints.isEmpty()) {
+                                // Loop through every physical endpoint mapped to this specific outcome class
+                                for (String endpoint : endpoints) {
+                                    log.debug("[{}] Multicast → {}", processorName, endpoint);
+
+                                    // Clone the parent exchange to preserve MDC logs, BreadcrumbIds, and headers
+                                    Exchange childExchange = exchange.copy();
+                                    childExchange.getIn().setBody(dest.body());
+
+                                    // Route safely through the producer template
+                                    producerTemplate.send(endpoint, childExchange);
+
+                                    // Propagate downstream failures back up to the parent framework layer
+                                    if (childExchange.getException() != null) {
+                                        log.error("[{}] Multicast destination '{}' failed downstream.",
+                                                processorName, endpoint, childExchange.getException());
+                                        exchange.setException(childExchange.getException());
+                                        return; // Stop processing immediately to trigger YAML errorHandlers
+                                    }
+                                }
                             } else {
-                                log.warn("[{}] No binding for Multicast destination '{}' — skipping",
+                                log.warn("[{}] No binding found for destination class '{}' — skipping",
                                         processorName, dest.getClass().getSimpleName());
                             }
                         }
+
+                        // Halt further processing along the primary route branch
                         exchange.setRouteStop(true);
                         return;
                     }
@@ -111,18 +134,40 @@ public class GuanacoRouteBuilder extends RouteBuilder {
 
         ChoiceDefinition choice = route.choice();
         Class<?>[] permitted = routeInterface.getPermittedSubclasses();
-        for (Map.Entry<String, String> binding : bindings.entrySet()) {
+
+        for (Map.Entry<String, List<String>> binding : bindings.entrySet()) {
             String outcomeName = binding.getKey();
-            String endpointUri = binding.getValue();
+            List<String> endpointUris = binding.getValue();
+
+            // Guard against empty or null YAML declarations
+            if (endpointUris == null || endpointUris.isEmpty()) {
+                log.warn("[{}] Outcome '{}' has no defined destination URIs — skipping branch.", processorName, outcomeName);
+                continue;
+            }
+
             Class<?> outcomeClass = (permitted == null) ? null : findPermittedSubtype(outcomeName);
             if (outcomeClass == null) {
                 log.debug("[{}] Skipping choice() branch for '{}' — {} is not a sealed hierarchy "
                         + "(likely a Multicast-only route).", processorName, outcomeName, routeInterface.getName());
                 continue;
             }
-            choice.when(exchange -> outcomeClass.isInstance(exchange.getProperty(OUTCOME_PROPERTY)))
-                    .to(endpointUri);
-            log.info("[{}] Bound {} → {}", processorName, outcomeName, endpointUri);
+
+            // Determine path density based on the size of the YAML configuration list
+            if (endpointUris.size() == 1) {
+                // 1. Standard Point-to-Point delivery
+                choice.when(exchange -> outcomeClass.isInstance(exchange.getProperty(OUTCOME_PROPERTY)))
+                        .to(endpointUris.get(0));
+
+                log.info("[{}] Bound {} → {}", processorName, outcomeName, endpointUris.get(0));
+            } else {
+                // 2. Automated Multicast Broadcasting
+                choice.when(exchange -> outcomeClass.isInstance(exchange.getProperty(OUTCOME_PROPERTY)))
+                        .multicast()
+                        .to(endpointUris.toArray(new String[0]))
+                        .endChoice(); // Popping the internal stack back to ChoiceDefinition automatically!
+
+                log.info("[{}] Bound {} → Multicast {}", processorName, outcomeName, endpointUris);
+            }
         }
 
         choice.otherwise()
