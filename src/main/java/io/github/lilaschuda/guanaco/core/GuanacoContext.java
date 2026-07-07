@@ -53,7 +53,7 @@ public class GuanacoContext extends SpringCamelContext {
      * Call this BEFORE start().
      */
     public void wireRoutes() throws Exception {
-        log.info("=== camel-guanaco v0.1 wiring routes ===");
+        log.info("=== camel-guanaco v0.2 wiring routes ===");
 
         GuanacoConfig config = configLoader.load();
         BindingValidator validator = new BindingValidator(config.getFramework().getValidation());
@@ -64,25 +64,27 @@ public class GuanacoContext extends SpringCamelContext {
             return;
         }
 
+        // Single, boot-time-only, package-bounded scan producing the frozen,
+        // closed-world registry of every concrete RouteOutcome implementation.
+        // Built exactly once here, reused below for every processor's binding
+        // validation. No further reflection or classpath scanning occurs after
+        // this point — runtime dispatch only ever compares an already-known
+        // Class against this frozen map or against a processor's own sealed
+        // hierarchy.
+        RouteOutcomeRegistry outcomeRegistry = RouteOutcomeRegistry.scan(basePackage);
+
         Reflections reflections = new Reflections(basePackage);
         Set<Class<?>> rawProcessorClasses = reflections.getTypesAnnotatedWith(GuanacoRoute.class);
-        
+
         @SuppressWarnings("unchecked")
         Set<Class<? extends Processor<? extends RouteOutcome<?>>>> processorClasses = rawProcessorClasses.stream()
-            //.filter(RouteOutcome.class::isAssignableFrom)
-            @SuppressWarnings("unchecked")
-            .map(clazz -> (Class<? extends Processor<? extends RouteOutcome<?>>>)clazz)
-            .collect(Collectors.toSet());
-        
+                .filter(Processor.class::isAssignableFrom)
+                .map(clazz -> (Class<? extends Processor<? extends RouteOutcome<?>>>) clazz)
+                .collect(Collectors.toSet());
+
         log.info("Found {} @GuanacoRoute processor(s) in package '{}'", processorClasses.size(), basePackage);
 
         for (Class<? extends Processor<? extends RouteOutcome<?>>> processorClass : processorClasses) {
-            if (!Processor.class.isAssignableFrom(processorClass)) {
-                log.warn("Class {} is annotated @GuanacoRoute but does not implement Processor<R> — skipping",
-                        processorClass.getName());
-                continue;
-            }
-
             String name = resolveProcessorName(processorClass);
             RouteConfig routeConfig = routeConfigs.get(name);
 
@@ -99,9 +101,10 @@ public class GuanacoContext extends SpringCamelContext {
                     .map(Class::getSimpleName)
                     .collect(Collectors.toSet());
 
-            validator.validate(name, outcomeNames, routeConfig);
+            validator.validate(name, outcomeNames, routeConfig, outcomeRegistry);
 
-            Processor<RouteOutcome<?>> instance = (Processor<RouteOutcome<?>>)processorClass.getDeclaredConstructor().newInstance();
+            Processor<RouteOutcome<?>> instance
+                    = (Processor<RouteOutcome<?>>) processorClass.getDeclaredConstructor().newInstance();
 
             GuanacoRouteBuilder builder = new GuanacoRouteBuilder(instance, routeInterface, routeConfig, name);
             this.addRoutes(builder);
