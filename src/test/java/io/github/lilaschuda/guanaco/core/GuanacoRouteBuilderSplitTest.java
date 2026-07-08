@@ -27,6 +27,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * (e.g. a shared audit/notification outcome used by many unrelated
  * processors) possible — Java's sealed-type rules would otherwise force
  * every such outcome into a single processor's own package.
+ *
+ * Every Split item is also checked against the frozen RouteOutcomeRegistry
+ * before dispatch, independent of its YAML binding — see
+ * splitItemNotInRegistry_isRejectedAndLoggedWithoutCrashingTheRoute.
  */
 class GuanacoRouteBuilderSplitTest extends GuanacoRouteBuilderTestSupport {
 
@@ -49,6 +53,9 @@ class GuanacoRouteBuilderSplitTest extends GuanacoRouteBuilderTestSupport {
 
     @Test
     void splitItem_outsideOriginatingSealedHierarchy_stillRoutesByBindingName() throws Exception {
+        RouteOutcomeRegistry registry = RouteOutcomeRegistryTestSupport.of(
+                ToMainframe.class, ToRest.class, ToAuditLog.class);
+
         // ToAuditLog is NOT a permitted subtype of BulkOrderRoute — it's an
         // entirely unrelated type, bound only by its simple class name.
         RouteConfig config = routeConfig("direct:bulkOrders", Map.of(
@@ -61,7 +68,7 @@ class GuanacoRouteBuilderSplitTest extends GuanacoRouteBuilderTestSupport {
                 new ToAuditLog("cross-cutting-audit-item")
         ));
 
-        registerRoute(processor, BULK_ORDER_ROUTE_CLASS, config, "BulkOrderProcessor");
+        registerRoute(processor, BULK_ORDER_ROUTE_CLASS, config, "BulkOrderProcessor", registry);
         context.start();
 
         MockEndpoint mainframe = context.getEndpoint("mock:mainframe", MockEndpoint.class);
@@ -79,14 +86,15 @@ class GuanacoRouteBuilderSplitTest extends GuanacoRouteBuilderTestSupport {
         // it is not, and could never be, a permitted subtype of
         // BulkOrderRoute. If this framework still tried to validate Split
         // items against the sealed hierarchy, this message would have been
-        // silently dropped by resolveOutcomeClass — proving the correction
-        // actually took effect, not just that Split still works in the easy,
-        // same-hierarchy case.
+        // silently dropped — proving the correction actually took effect.
         MockEndpoint.assertIsSatisfied(context);
     }
 
     @Test
     void splitAndForget_routesEachItemToItsOwnEndpointBySimpleClassName() throws Exception {
+        RouteOutcomeRegistry registry = RouteOutcomeRegistryTestSupport.of(
+                ToMainframe.class, ToRest.class, ToAuditLog.class);
+
         RouteConfig config = routeConfig("direct:bulkOrders", Map.of(
                 "ToMainframe", "mock:mainframe",
                 "ToRest",      "mock:rest",
@@ -99,7 +107,7 @@ class GuanacoRouteBuilderSplitTest extends GuanacoRouteBuilderTestSupport {
                 new ToAuditLog("audit-item")
         ));
 
-        registerRoute(processor, BULK_ORDER_ROUTE_CLASS, config, "BulkOrderProcessor");
+        registerRoute(processor, BULK_ORDER_ROUTE_CLASS, config, "BulkOrderProcessor", registry);
         context.start();
 
         MockEndpoint mainframe = context.getEndpoint("mock:mainframe", MockEndpoint.class);
@@ -121,7 +129,11 @@ class GuanacoRouteBuilderSplitTest extends GuanacoRouteBuilderTestSupport {
 
     @Test
     void splitItemWithNoBinding_isLoggedAndSkippedWithoutCrashingTheRoute() throws Exception {
-        // ToAuditLog is deliberately left unbound.
+        // ToAuditLog is registered (passes the defense-in-depth check) but
+        // deliberately left unbound in routes.yaml.
+        RouteOutcomeRegistry registry = RouteOutcomeRegistryTestSupport.of(
+                ToMainframe.class, ToAuditLog.class);
+
         RouteConfig config = routeConfig("direct:bulkOrders", Map.of(
                 "ToMainframe", "mock:mainframe"
         ));
@@ -131,7 +143,7 @@ class GuanacoRouteBuilderSplitTest extends GuanacoRouteBuilderTestSupport {
                 new ToAuditLog("orphaned-item")
         ));
 
-        registerRoute(processor, BULK_ORDER_ROUTE_CLASS, config, "BulkOrderProcessor");
+        registerRoute(processor, BULK_ORDER_ROUTE_CLASS, config, "BulkOrderProcessor", registry);
         context.start();
 
         MockEndpoint mainframe = context.getEndpoint("mock:mainframe", MockEndpoint.class);
@@ -148,7 +160,42 @@ class GuanacoRouteBuilderSplitTest extends GuanacoRouteBuilderTestSupport {
     }
 
     @Test
+    void splitItemNotInRegistry_isRejectedAndLoggedWithoutCrashingTheRoute() throws Exception {
+        // ToAuditLog deliberately excluded from the registry, even though it
+        // has a valid YAML binding — modeling a runtime-constructed instance
+        // whose class was never part of the boot-time scan.
+        RouteOutcomeRegistry registry = RouteOutcomeRegistryTestSupport.of(ToMainframe.class, ToRest.class);
+
+        RouteConfig config = routeConfig("direct:bulkOrders", Map.of(
+                "ToMainframe", "mock:mainframe",
+                "ToAuditLog",  "mock:audit"
+        ));
+
+        Processor<RouteOutcome<?>> processor = exchange -> new Split(List.of(
+                new ToMainframe("mf-item"),
+                new ToAuditLog("should-be-rejected")
+        ));
+
+        registerRoute(processor, BULK_ORDER_ROUTE_CLASS, config, "BulkOrderProcessor", registry);
+        context.start();
+
+        MockEndpoint mainframe = context.getEndpoint("mock:mainframe", MockEndpoint.class);
+        MockEndpoint audit     = context.getEndpoint("mock:audit",     MockEndpoint.class);
+
+        mainframe.expectedMessageCount(1);
+        audit.expectedMessageCount(0); // rejected before dispatch, despite having a valid binding
+
+        ProducerTemplate producer = context.createProducerTemplate();
+        producer.sendBody("direct:bulkOrders", "trigger");
+
+        MockEndpoint.assertIsSatisfied(context);
+    }
+
+    @Test
     void splitWithAggregationStrategy_combinesResultsInDeclaredOrder() throws Exception {
+        RouteOutcomeRegistry registry = RouteOutcomeRegistryTestSupport.of(
+                ToMainframe.class, ToRest.class, ToAuditLog.class);
+
         RouteConfig config = routeConfig("direct:bulkOrders", Map.of(
                 "ToMainframe", "mock:mainframe",
                 "ToRest",      "mock:rest",
@@ -167,7 +214,7 @@ class GuanacoRouteBuilderSplitTest extends GuanacoRouteBuilderTestSupport {
                 concatStrategy
         );
 
-        registerRoute(processor, BULK_ORDER_ROUTE_CLASS, config, "BulkOrderProcessor");
+        registerRoute(processor, BULK_ORDER_ROUTE_CLASS, config, "BulkOrderProcessor", registry);
         context.start();
 
         context.getEndpoint("mock:mainframe", MockEndpoint.class);

@@ -43,6 +43,16 @@ import java.util.Map;
  * declared sealed hierarchy — this is the compile-time-enforced path and
  * is unaffected by this distinction.
  *
+ * <p><b>Defense in depth:</b> every Split/Multicast destination is checked
+ * against the frozen, boot-time {@link RouteOutcomeRegistry} before
+ * dispatch, independent of whether it has a YAML binding. BindingValidator
+ * guarantees the *configured bindings* are legitimate at boot time, but a
+ * Split/Multicast list is built by arbitrary processor code at runtime —
+ * this check catches an outcome instance whose class was never part of the
+ * boot-time scan (wrong package, a programming mistake) before it's ever
+ * sent anywhere, regardless of whether a stale or coincidental binding
+ * might otherwise have matched it.
+ *
  * <p><b>Exchange body discipline:</b> the exchange body only ever holds a
  * value that is semantically correct for the current position in the route
  * graph. Drop, Split, and Multicast outcomes are left untouched by
@@ -58,6 +68,13 @@ import java.util.Map;
  * <p><b>Split aggregation:</b> split-and-forget by default. An optional
  * Camel {@code AggregationStrategy} may be supplied on the {@link Split}
  * outcome to collect results using Camel's native splitter engine.
+ *
+ * <p><b>No runtime reflection:</b> class resolution during dispatch is
+ * always a lookup against either the processor's own sealed hierarchy
+ * ({@code getPermittedSubclasses()}, resolved once at configure time) or
+ * the frozen {@link RouteOutcomeRegistry} built once at boot. No
+ * {@code Class.forName}, no classpath scanning, and no dynamic class
+ * loading occur anywhere in the per-message dispatch path.
  */
 public class GuanacoRouteBuilder extends RouteBuilder {
 
@@ -68,6 +85,7 @@ public class GuanacoRouteBuilder extends RouteBuilder {
     private final Class<? extends RouteOutcome<?>> routeInterface;
     private final RouteConfig config;
     private final String processorName;
+    private final RouteOutcomeRegistry outcomeRegistry;
 
     // Created once in configure(); Camel manages its lifecycle alongside the CamelContext.
     private ProducerTemplate producerTemplate;
@@ -76,11 +94,13 @@ public class GuanacoRouteBuilder extends RouteBuilder {
             Processor<? extends RouteOutcome<?>> processorInstance,
             Class<? extends RouteOutcome<?>> routeInterface,
             RouteConfig config,
-            String processorName) {
+            String processorName,
+            RouteOutcomeRegistry outcomeRegistry) {
         this.processor = processorInstance;
         this.routeInterface = routeInterface;
         this.config = config;
         this.processorName = processorName;
+        this.outcomeRegistry = outcomeRegistry;
     }
 
     @Override
@@ -204,6 +224,9 @@ public class GuanacoRouteBuilder extends RouteBuilder {
      * permitted subtype of the originating processor's route interface,
      * which is what makes cross-cutting, reusable outcome types possible.
      *
+     * <p>Before any binding lookup, the item's runtime class is checked
+     * against the frozen {@link RouteOutcomeRegistry} via {@link #isRegistered}.
+     *
      * <p>After dispatch, the sub-exchange body is set to the item's own
      * payload, so an optional user-supplied AggregationStrategy has a
      * meaningful value to combine.
@@ -215,6 +238,10 @@ public class GuanacoRouteBuilder extends RouteBuilder {
             log.error("[{}] Split item is not a RouteOutcome ({}) — skipping.",
                     processorName, item == null ? "null" : item.getClass().getName());
             return;
+        }
+
+        if (!isRegistered(outcome)) {
+            return; // isRegistered already logged the rejection
         }
 
         String outcomeName = outcome.getClass().getSimpleName();
@@ -240,7 +267,9 @@ public class GuanacoRouteBuilder extends RouteBuilder {
      *
      * <p>Best-effort: a failed send is routed to the dead letter endpoint (if
      * configured) and logged, but does not stop the fan-out from continuing
-     * to remaining destinations.
+     * to remaining destinations. Each destination is checked against the
+     * frozen {@link RouteOutcomeRegistry} via {@link #isRegistered} before
+     * any binding lookup or send is attempted.
      */
     private void fanOut(Exchange exchange) {
         Object outcomeProperty = exchange.getProperty(OUTCOME_PROPERTY);
@@ -257,6 +286,11 @@ public class GuanacoRouteBuilder extends RouteBuilder {
         int failureCount = 0;
 
         for (RouteOutcome<?> destination : multicast.destinations()) {
+            if (!isRegistered(destination)) {
+                failureCount++;
+                continue; // isRegistered already logged the rejection
+            }
+
             String outcomeName = destination.getClass().getSimpleName();
             List<String> endpoints = bindings.get(outcomeName);
 
@@ -274,11 +308,37 @@ public class GuanacoRouteBuilder extends RouteBuilder {
         }
 
         if (failureCount > 0) {
-            log.warn("[{}] Multicast completed with {} failed send(s) — see errors above.",
+            log.warn("[{}] Multicast completed with {} failed/rejected send(s) — see errors above.",
                     processorName, failureCount);
         }
 
         exchange.setRouteStop(true);
+    }
+
+    /**
+     * Defense-in-depth check: confirms the outcome's runtime class was part
+     * of the boot-time {@link RouteOutcomeRegistry} scan. Rejects anything
+     * that wasn't — a mistakenly constructed instance, a class from outside
+     * the scanned package, or any other unmapped type that a processor's own
+     * logic might accidentally place into a Split or Multicast collection.
+     *
+     * <p>This is a pure map lookup against an already-frozen registry — no
+     * reflection, no classpath access, and no dynamic class loading occur
+     * here or anywhere else after boot.
+     */
+    private boolean isRegistered(RouteOutcome<?> outcome) {
+        String simpleName = outcome.getClass().getSimpleName();
+
+        if (!outcomeRegistry.contains(simpleName)) {
+            log.error("[{}] Rejected outcome of type '{}' ({}) — not found in the boot-time " +
+                    "RouteOutcomeRegistry. This outcome was constructed at runtime but was never " +
+                    "scanned; it may belong to a package outside the configured base package, or " +
+                    "represent a programming error. Dispatch refused for safety.",
+                    processorName, simpleName, outcome.getClass().getName());
+            return false;
+        }
+
+        return true;
     }
 
     /**

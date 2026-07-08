@@ -106,7 +106,8 @@ public class GuanacoContext extends SpringCamelContext {
             Processor<RouteOutcome<?>> instance
                     = (Processor<RouteOutcome<?>>) processorClass.getDeclaredConstructor().newInstance();
 
-            GuanacoRouteBuilder builder = new GuanacoRouteBuilder(instance, routeInterface, routeConfig, name);
+            GuanacoRouteBuilder builder = new GuanacoRouteBuilder(
+                    instance, routeInterface, routeConfig, name, outcomeRegistry);
             this.addRoutes(builder);
 
             log.info("[{}] Route registered: {} → {} outcome(s)", name, routeConfig.getFrom(), outcomeNames.size());
