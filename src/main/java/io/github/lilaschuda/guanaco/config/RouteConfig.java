@@ -23,15 +23,19 @@ public class RouteConfig {
     private String from;
     private Map<String, List<String>> bindings = new LinkedHashMap<>();
     private ErrorHandlerConfig errorHandler;
+    private GuanacoAggregateConfig aggregate;
 
     public String getFrom() { return from; }
     public void setFrom(String from) { this.from = from; }
 
     public Map<String, List<String>> getBindings() { return bindings; }
-    //public void setBindings(Map<String, String> bindings) { this.bindings = bindings; }
 
     public ErrorHandlerConfig getErrorHandler() { return errorHandler; }
     public void setErrorHandler(ErrorHandlerConfig errorHandler) { this.errorHandler = errorHandler; }
+
+    /** Null if no {@code aggregate:} block was declared for this route. */
+    public GuanacoAggregateConfig getAggregate() { return aggregate; }
+    public void setAggregate(GuanacoAggregateConfig aggregate) { this.aggregate = aggregate; }
 
     public static class ErrorHandlerConfig {
         private String deadLetter;
@@ -43,11 +47,7 @@ public class RouteConfig {
         public int getMaxRetries() { return maxRetries; }
         public void setMaxRetries(int maxRetries) { this.maxRetries = maxRetries; }
     }
-    
-    /**
-     * Flexible deserialization engine: Normalizes both standalone strings 
-     * and YAML arrays into a unified, clean List structural format.
-     */
+
     @JsonSetter("bindings")
     @SuppressWarnings("unchecked")
     public void setBindings(Map<String, Object> rawBindings) {
@@ -56,12 +56,10 @@ public class RouteConfig {
 
         for (Map.Entry<String, Object> entry : rawBindings.entrySet()) {
             Object value = entry.getValue();
-            
+
             if (value instanceof List) {
-                // It's already a YAML list block
                 this.bindings.put(entry.getKey(), (List<String>) value);
             } else if (value != null) {
-                // Coerce standalone scalar strings into a single-element list wrapper
                 this.bindings.put(entry.getKey(), List.of(value.toString()));
             }
         }

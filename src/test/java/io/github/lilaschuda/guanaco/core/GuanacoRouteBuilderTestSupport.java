@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.apache.camel.AggregationStrategy;
 
 /**
  * Shared JUnit 5 lifecycle and construction helpers for tests that exercise
@@ -59,7 +60,7 @@ public abstract class GuanacoRouteBuilderTestSupport {
             RouteConfig config,
             String processorName,
             RouteOutcomeRegistry registry) throws Exception {
-        context.addRoutes(new GuanacoRouteBuilder(processor, routeInterface, config, processorName, registry));
+        registerRoute(processor, routeInterface, config, processorName, registry, Map.of());
     }
 
     /**
@@ -68,10 +69,21 @@ public abstract class GuanacoRouteBuilderTestSupport {
      */
     protected void registerRoute(
             Processor<? extends RouteOutcome<?>> processor,
+            Class<? extends RouteOutcome<?>> routeInterface,
+            RouteConfig config,
+            String processorName,
+            RouteOutcomeRegistry registry,
+            Map<String, AggregationStrategy> aggregationStrategies) throws Exception {
+        context.addRoutes(new GuanacoRouteBuilder(
+                processor, routeInterface, config, processorName, registry, aggregationStrategies));
+    }
+
+    protected void registerRoute(
+            Processor<? extends RouteOutcome<?>> processor,
             RouteConfig config,
             String processorName,
             RouteOutcomeRegistry registry) throws Exception {
-        registerRoute(processor, ROUTE_OUTCOME_CLASS, config, processorName, registry);
+        registerRoute(processor, ROUTE_OUTCOME_CLASS, config, processorName, registry, Map.of());
     }
 
     /**

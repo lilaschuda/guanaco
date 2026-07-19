@@ -1,5 +1,6 @@
 package io.github.lilaschuda.guanaco.core;
 
+import io.github.lilaschuda.guanaco.config.GuanacoAggregateConfig;
 import io.github.lilaschuda.guanaco.config.RouteConfig;
 import io.github.lilaschuda.guanaco.dsl.Processor;
 import io.github.lilaschuda.guanaco.eip.Drop;
@@ -16,65 +17,74 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
+import org.apache.camel.AggregationStrategy;
+import org.apache.camel.model.AggregateDefinition;
+import org.apache.camel.model.ProcessorDefinition;
 
 /**
  * Generates a Camel {@link RouteBuilder} route from a Guanaco {@link Processor}
  * and its corresponding {@link RouteConfig}.
  *
- * <p>A single route is generated per processor, with one {@code choice()}
- * table containing, in order: a Drop branch, a Split branch, a Multicast
- * branch, one branch per YAML-bound standard outcome, and a final
- * {@code otherwise()} that logs unhandled outcomes. The graph is entirely
- * static once built — it never changes shape at runtime regardless of load.
+ * <p>
+ * A single route is generated per processor, with one {@code choice()} table
+ * containing, in order: a Drop branch, a Split branch, a Multicast branch, one
+ * branch per YAML-bound standard outcome, and a final {@code otherwise()} that
+ * logs unhandled outcomes. The graph is entirely static once built — it never
+ * changes shape at runtime regardless of load.
  *
- * <p><b>Split and Multicast are dispatched identically:</b> both resolve
- * their destination(s) by the runtime outcome's simple class name against
- * {@code routes.yaml} bindings, completely independent of any sealed
- * interface. This is deliberate: Split items are, per design, autonomous
- * messages the moment they're unrolled — they are not required to be
- * permitted subtypes of the originating processor's own sealed route
- * interface. This is what makes cross-cutting outcomes (e.g. a shared
- * {@code ToAuditLog} reused across many unrelated processors) possible;
- * Java's sealed-type rules would otherwise force every such outcome into
- * a single processor's own package/module.
+ * <p>
+ * <b>Split and Multicast are dispatched identically:</b> both resolve their
+ * destination(s) by the runtime outcome's simple class name against
+ * {@code routes.yaml} bindings, completely independent of any sealed interface.
+ * This is deliberate: Split items are, per design, autonomous messages the
+ * moment they're unrolled — they are not required to be permitted subtypes of
+ * the originating processor's own sealed route interface. This is what makes
+ * cross-cutting outcomes (e.g. a shared {@code ToAuditLog} reused across many
+ * unrelated processors) possible; Java's sealed-type rules would otherwise
+ * force every such outcome into a single processor's own package/module.
  *
- * <p>Standard (non-Split, non-Multicast) outcomes are still matched by
- * runtime type identity ({@code isInstance}) against the processor's
- * declared sealed hierarchy — this is the compile-time-enforced path and
- * is unaffected by this distinction.
+ * <p>
+ * Standard (non-Split, non-Multicast) outcomes are still matched by runtime
+ * type identity ({@code isInstance}) against the processor's declared sealed
+ * hierarchy — this is the compile-time-enforced path and is unaffected by this
+ * distinction.
  *
- * <p><b>Defense in depth:</b> every Split/Multicast destination is checked
- * against the frozen, boot-time {@link RouteOutcomeRegistry} before
- * dispatch, independent of whether it has a YAML binding. BindingValidator
- * guarantees the *configured bindings* are legitimate at boot time, but a
- * Split/Multicast list is built by arbitrary processor code at runtime —
- * this check catches an outcome instance whose class was never part of the
- * boot-time scan (wrong package, a programming mistake) before it's ever
- * sent anywhere, regardless of whether a stale or coincidental binding
- * might otherwise have matched it.
+ * <p>
+ * <b>Defense in depth:</b> every Split/Multicast destination is checked against
+ * the frozen, boot-time {@link RouteOutcomeRegistry} before dispatch,
+ * independent of whether it has a YAML binding. BindingValidator guarantees the
+ * *configured bindings* are legitimate at boot time, but a Split/Multicast list
+ * is built by arbitrary processor code at runtime — this check catches an
+ * outcome instance whose class was never part of the boot-time scan (wrong
+ * package, a programming mistake) before it's ever sent anywhere, regardless of
+ * whether a stale or coincidental binding might otherwise have matched it.
  *
- * <p><b>Exchange body discipline:</b> the exchange body only ever holds a
- * value that is semantically correct for the current position in the route
- * graph. Drop, Split, and Multicast outcomes are left untouched by
- * {@link #dispatchOutcome} — each branch sets the body explicitly, at the
- * point it actually needs to.
+ * <p>
+ * <b>Exchange body discipline:</b> the exchange body only ever holds a value
+ * that is semantically correct for the current position in the route graph.
+ * Drop, Split, and Multicast outcomes are left untouched by
+ * {@link #dispatchOutcome} — each branch sets the body explicitly, at the point
+ * it actually needs to.
  *
- * <p><b>Delivery semantics for Split and Multicast:</b> both are best-effort
- * / fire-and-forget. A failed send to one destination does not stop
- * delivery to the rest. Failed sends are routed to the configured dead
- * letter endpoint ({@code errorHandler.deadLetter} in routes.yaml) if one is
- * set; otherwise the failure is logged loudly and the message is lost.
+ * <p>
+ * <b>Delivery semantics for Split and Multicast:</b> both are best-effort /
+ * fire-and-forget. A failed send to one destination does not stop delivery to
+ * the rest. Failed sends are routed to the configured dead letter endpoint
+ * ({@code errorHandler.deadLetter} in routes.yaml) if one is set; otherwise the
+ * failure is logged loudly and the message is lost.
  *
- * <p><b>Split aggregation:</b> split-and-forget by default. An optional
- * Camel {@code AggregationStrategy} may be supplied on the {@link Split}
- * outcome to collect results using Camel's native splitter engine.
+ * <p>
+ * <b>Split aggregation:</b> split-and-forget by default. An optional Camel
+ * {@code AggregationStrategy} may be supplied on the {@link Split} outcome to
+ * collect results using Camel's native splitter engine.
  *
- * <p><b>No runtime reflection:</b> class resolution during dispatch is
- * always a lookup against either the processor's own sealed hierarchy
- * ({@code getPermittedSubclasses()}, resolved once at configure time) or
- * the frozen {@link RouteOutcomeRegistry} built once at boot. No
- * {@code Class.forName}, no classpath scanning, and no dynamic class
- * loading occur anywhere in the per-message dispatch path.
+ * <p>
+ * <b>No runtime reflection:</b> class resolution during dispatch is always a
+ * lookup against either the processor's own sealed hierarchy
+ * ({@code getPermittedSubclasses()}, resolved once at configure time) or the
+ * frozen {@link RouteOutcomeRegistry} built once at boot. No
+ * {@code Class.forName}, no classpath scanning, and no dynamic class loading
+ * occur anywhere in the per-message dispatch path.
  */
 public class GuanacoRouteBuilder extends RouteBuilder {
 
@@ -86,6 +96,7 @@ public class GuanacoRouteBuilder extends RouteBuilder {
     private final RouteConfig config;
     private final String processorName;
     private final RouteOutcomeRegistry outcomeRegistry;
+    private final Map<String, AggregationStrategy> aggregationStrategies;
 
     // Created once in configure(); Camel manages its lifecycle alongside the CamelContext.
     private ProducerTemplate producerTemplate;
@@ -95,12 +106,14 @@ public class GuanacoRouteBuilder extends RouteBuilder {
             Class<? extends RouteOutcome<?>> routeInterface,
             RouteConfig config,
             String processorName,
-            RouteOutcomeRegistry outcomeRegistry) {
+            RouteOutcomeRegistry outcomeRegistry,
+            Map<String, AggregationStrategy> aggregationStrategies) {
         this.processor = processorInstance;
         this.routeInterface = routeInterface;
         this.config = config;
         this.processorName = processorName;
         this.outcomeRegistry = outcomeRegistry;
+        this.aggregationStrategies = aggregationStrategies;
     }
 
     @Override
@@ -108,18 +121,26 @@ public class GuanacoRouteBuilder extends RouteBuilder {
         producerTemplate = getContext().createProducerTemplate();
         configureErrorHandler();
 
-        RouteDefinition route = from(config.getFrom())
-                .routeId("guanaco-" + processorName)
-                .process(this::dispatchOutcome);
+        // Change type to ProcessorDefinition<?> to allow polymorphic EIP chaining
+        ProcessorDefinition<?> route = from(config.getFrom())
+                .routeId("guanaco-" + processorName);
 
-        ChoiceDefinition choice = route.choice();
+        if (config.getAggregate() != null) {
+            route = wireAggregate(route, config.getAggregate());
+        }
+
+        // This step now neatly appends inside the aggregator block if it exists
+        ProcessorDefinition<?> afterProcess = route.process(this::dispatchOutcome);
+
+        // .choice() seamlessly transitions back to a standard ChoiceDefinition
+        ChoiceDefinition choice = afterProcess.choice();
 
         choice.when(this::isDrop)
                 .stop();
 
         choice.when(this::isSplit)
                 .split(splitExpression(), new GuanacoDelegatingAggregationStrategy(OUTCOME_PROPERTY, processorName))
-                    .process(this::dispatchSplitItem)
+                .process(this::dispatchSplitItem)
                 .end()
                 .stop();
 
@@ -127,10 +148,60 @@ public class GuanacoRouteBuilder extends RouteBuilder {
                 .process(this::fanOut)
                 .stop();
 
-        // Appends one branch per YAML-bound standard outcome, plus the final
-        // otherwise(), onto this same choice — Drop/Split/Multicast above are
-        // just earlier branches in the identical choice() block.
         buildChoiceTable(choice);
+    }
+
+    /**
+     * Wires a Camel native aggregate() step before the route's processor runs.
+     * Incoming messages are held and correlated by {@code correlationHeader}
+     * using Camel's type-safe header(name) expression builder — never an
+     * interpreted expression string — and merged via the AggregationStrategy
+     * registered under {@code strategyRef}. Only a completed (released)
+     * exchange proceeds to dispatchOutcome and the choice() table beyond this
+     * point; everything downstream of aggregation is unchanged from the
+     * non-aggregate case.
+     *
+     * <p>
+     * Structural shape (correlationHeader/strategyRef present, at least one
+     * completion condition) is already validated by
+     * {@link BindingValidator#validateAggregateConfig} before route building
+     * ever starts. What's checked here, at route-compilation time, is whether
+     * strategyRef actually resolves to a registered strategy — this can only be
+     * known here, since it depends on what's been registered via
+     * {@code GuanacoContext.registerAggregationStrategy(...)}, not on the
+     * config file alone.
+     *
+     * @throws GuanacoRouteBuilderException if strategyRef doesn't resolve to a
+     * registered AggregationStrategy.
+     */
+    private ProcessorDefinition<?> wireAggregate(ProcessorDefinition<?> route, GuanacoAggregateConfig aggConfig) {
+        AggregationStrategy strategy = aggregationStrategies.get(aggConfig.getStrategyRef());
+
+        if (strategy == null) {
+            throw new GuanacoRouteBuilderException(
+                    "[" + processorName + "] aggregate.strategyRef '" + aggConfig.getStrategyRef()
+                    + "' was not found among registered AggregationStrategy instances. Register it via "
+                    + "GuanacoContext.registerAggregationStrategy(\"" + aggConfig.getStrategyRef()
+                    + "\", ...) before calling wireRoutes().");
+        }
+
+        log.info("[{}] Wiring Aggregate — correlationHeader='{}', strategyRef='{}', "
+                + "completionSize={}, completionTimeoutMs={}",
+                processorName, aggConfig.getCorrelationHeader(), aggConfig.getStrategyRef(),
+                aggConfig.getCompletionSize(), aggConfig.getCompletionTimeoutMs());
+
+        // Open the aggregate block against the fluent route definition
+        AggregateDefinition aggregate = route.aggregate(header(aggConfig.getCorrelationHeader()), strategy);
+
+        if (aggConfig.getCompletionSize() != null) {
+            aggregate = aggregate.completionSize(aggConfig.getCompletionSize());
+        }
+        if (aggConfig.getCompletionTimeoutMs() != null) {
+            aggregate = aggregate.completionTimeout(aggConfig.getCompletionTimeoutMs());
+        }
+
+        // Return the open AggregateDefinition so downstream steps are added as its children
+        return aggregate;
     }
 
     private void configureErrorHandler() {
@@ -142,18 +213,18 @@ public class GuanacoRouteBuilder extends RouteBuilder {
     }
 
     /**
-     * Invokes the processor and stores the outcome. Sets the exchange body
-     * only for standard outcomes — Drop, Split, and Multicast intentionally
-     * leave the body untouched here, since their own handlers set it
-     * explicitly at the point it's actually needed.
+     * Invokes the processor and stores the outcome. Sets the exchange body only
+     * for standard outcomes — Drop, Split, and Multicast intentionally leave
+     * the body untouched here, since their own handlers set it explicitly at
+     * the point it's actually needed.
      */
     private void dispatchOutcome(Exchange exchange) throws Exception {
         RouteOutcome<?> outcome = processor.process(exchange);
 
         if (outcome == null) {
             throw new GuanacoRouteBuilderException(
-                    "[" + processorName + "] process() returned null. " +
-                    "Use Drop.INSTANCE to explicitly discard a message.");
+                    "[" + processorName + "] process() returned null. "
+                    + "Use Drop.INSTANCE to explicitly discard a message.");
         }
 
         log.debug("[{}] Routing outcome: {}", processorName, outcome.getClass().getSimpleName());
@@ -190,8 +261,8 @@ public class GuanacoRouteBuilder extends RouteBuilder {
      * dispatchOutcome — evaluated once per incoming message, not per item.
      *
      * Expression's evaluate() is generic over the requested result type;
-     * split() always requests the raw iterable, so the resolved list is
-     * simply cast to whatever type is asked for.
+     * split() always requests the raw iterable, so the resolved list is simply
+     * cast to whatever type is asked for.
      */
     private Expression splitExpression() {
         return new Expression() {
@@ -216,20 +287,23 @@ public class GuanacoRouteBuilder extends RouteBuilder {
     /**
      * Runs once per item after Camel's splitter creates a sub-exchange for it.
      *
-     * <p>Split items are dispatched by simple class name against
+     * <p>
+     * Split items are dispatched by simple class name against
      * {@code routes.yaml} bindings — the exact same mechanism
      * {@link #sendToEndpoint} already provides for Multicast — deliberately
      * bypassing any sealed-interface check. A Split item is an autonomous
-     * message the moment it's unrolled; it is never required to be a
-     * permitted subtype of the originating processor's route interface,
-     * which is what makes cross-cutting, reusable outcome types possible.
+     * message the moment it's unrolled; it is never required to be a permitted
+     * subtype of the originating processor's route interface, which is what
+     * makes cross-cutting, reusable outcome types possible.
      *
-     * <p>Before any binding lookup, the item's runtime class is checked
-     * against the frozen {@link RouteOutcomeRegistry} via {@link #isRegistered}.
+     * <p>
+     * Before any binding lookup, the item's runtime class is checked against
+     * the frozen {@link RouteOutcomeRegistry} via {@link #isRegistered}.
      *
-     * <p>After dispatch, the sub-exchange body is set to the item's own
-     * payload, so an optional user-supplied AggregationStrategy has a
-     * meaningful value to combine.
+     * <p>
+     * After dispatch, the sub-exchange body is set to the item's own payload,
+     * so an optional user-supplied AggregationStrategy has a meaningful value
+     * to combine.
      */
     private void dispatchSplitItem(Exchange exchange) {
         Object item = exchange.getIn().getBody();
@@ -265,11 +339,12 @@ public class GuanacoRouteBuilder extends RouteBuilder {
      * Sends each Multicast destination's payload to its bound endpoint(s), on a
      * fresh exchange per send so bodies stay isolated per destination.
      *
-     * <p>Best-effort: a failed send is routed to the dead letter endpoint (if
-     * configured) and logged, but does not stop the fan-out from continuing
-     * to remaining destinations. Each destination is checked against the
-     * frozen {@link RouteOutcomeRegistry} via {@link #isRegistered} before
-     * any binding lookup or send is attempted.
+     * <p>
+     * Best-effort: a failed send is routed to the dead letter endpoint (if
+     * configured) and logged, but does not stop the fan-out from continuing to
+     * remaining destinations. Each destination is checked against the frozen
+     * {@link RouteOutcomeRegistry} via {@link #isRegistered} before any binding
+     * lookup or send is attempted.
      */
     private void fanOut(Exchange exchange) {
         Object outcomeProperty = exchange.getProperty(OUTCOME_PROPERTY);
@@ -316,24 +391,25 @@ public class GuanacoRouteBuilder extends RouteBuilder {
     }
 
     /**
-     * Defense-in-depth check: confirms the outcome's runtime class was part
-     * of the boot-time {@link RouteOutcomeRegistry} scan. Rejects anything
-     * that wasn't — a mistakenly constructed instance, a class from outside
-     * the scanned package, or any other unmapped type that a processor's own
-     * logic might accidentally place into a Split or Multicast collection.
+     * Defense-in-depth check: confirms the outcome's runtime class was part of
+     * the boot-time {@link RouteOutcomeRegistry} scan. Rejects anything that
+     * wasn't — a mistakenly constructed instance, a class from outside the
+     * scanned package, or any other unmapped type that a processor's own logic
+     * might accidentally place into a Split or Multicast collection.
      *
-     * <p>This is a pure map lookup against an already-frozen registry — no
-     * reflection, no classpath access, and no dynamic class loading occur
-     * here or anywhere else after boot.
+     * <p>
+     * This is a pure map lookup against an already-frozen registry — no
+     * reflection, no classpath access, and no dynamic class loading occur here
+     * or anywhere else after boot.
      */
     private boolean isRegistered(RouteOutcome<?> outcome) {
         String simpleName = outcome.getClass().getSimpleName();
 
         if (!outcomeRegistry.contains(simpleName)) {
-            log.error("[{}] Rejected outcome of type '{}' ({}) — not found in the boot-time " +
-                    "RouteOutcomeRegistry. This outcome was constructed at runtime but was never " +
-                    "scanned; it may belong to a package outside the configured base package, or " +
-                    "represent a programming error. Dispatch refused for safety.",
+            log.error("[{}] Rejected outcome of type '{}' ({}) — not found in the boot-time "
+                    + "RouteOutcomeRegistry. This outcome was constructed at runtime but was never "
+                    + "scanned; it may belong to a package outside the configured base package, or "
+                    + "represent a programming error. Dispatch refused for safety.",
                     processorName, simpleName, outcome.getClass().getName());
             return false;
         }
@@ -346,17 +422,19 @@ public class GuanacoRouteBuilder extends RouteBuilder {
      * logged and swallowed here — by design, one failed destination does not
      * stop the rest of the fan-out/split or the parent route.
      *
-     * <p>On failure, the payload is routed to the configured dead letter
-     * endpoint ({@code errorHandler.deadLetter} in routes.yaml), if one is
-     * set. If no dead letter is configured, the failure is logged loudly —
-     * the message is lost in that case.
+     * <p>
+     * On failure, the payload is routed to the configured dead letter endpoint
+     * ({@code errorHandler.deadLetter} in routes.yaml), if one is set. If no
+     * dead letter is configured, the failure is logged loudly — the message is
+     * lost in that case.
      *
-     * <p>Shared by both {@link #fanOut} (Multicast) and
-     * {@link #dispatchSplitItem} (Split) — both resolve destinations by
-     * simple class name and both get identical delivery guarantees.
+     * <p>
+     * Shared by both {@link #fanOut} (Multicast) and {@link #dispatchSplitItem}
+     * (Split) — both resolve destinations by simple class name and both get
+     * identical delivery guarantees.
      *
      * @return true if the send succeeded, false if it failed (regardless of
-     *         whether it was successfully forwarded to a dead letter).
+     * whether it was successfully forwarded to a dead letter).
      */
     private boolean sendToEndpoint(RouteOutcome<?> destination, String endpoint) {
         log.debug("[{}] → {}", processorName, endpoint);
@@ -447,26 +525,27 @@ public class GuanacoRouteBuilder extends RouteBuilder {
     }
 
     /**
-     * Resolves a YAML binding key to its permitted subtype class, for
-     * standard outcomes only. Split and Multicast never call this — they
-     * resolve by simple name directly against the bindings map, with no
-     * sealed-hierarchy requirement.
+     * Resolves a YAML binding key to its permitted subtype class, for standard
+     * outcomes only. Split and Multicast never call this — they resolve by
+     * simple name directly against the bindings map, with no sealed-hierarchy
+     * requirement.
      *
-     * <p>Returns null in two distinct cases, both logged differently:
+     * <p>
+     * Returns null in two distinct cases, both logged differently:
      * <ul>
-     *   <li>{@code routeInterface} isn't sealed at all — expected for a
-     *       Multicast/Split-only route, logged at debug level.</li>
-     *   <li>{@code routeInterface} is sealed but no permitted subtype matches
-     *       {@code outcomeName} — almost always a typo in routes.yaml, logged
-     *       as a warning so it doesn't fail silently.</li>
+     * <li>{@code routeInterface} isn't sealed at all — expected for a
+     * Multicast/Split-only route, logged at debug level.</li>
+     * <li>{@code routeInterface} is sealed but no permitted subtype matches
+     * {@code outcomeName} — almost always a typo in routes.yaml, logged as a
+     * warning so it doesn't fail silently.</li>
      * </ul>
      */
     private Class<?> resolveOutcomeClass(String outcomeName) {
         Class<?>[] permitted = routeInterface.getPermittedSubclasses();
 
         if (permitted == null) {
-            log.debug("[{}] Skipping choice() branch for '{}' — {} is not a sealed hierarchy " +
-                    "(likely a Multicast/Split-only route).", processorName, outcomeName, routeInterface.getName());
+            log.debug("[{}] Skipping choice() branch for '{}' — {} is not a sealed hierarchy "
+                    + "(likely a Multicast/Split-only route).", processorName, outcomeName, routeInterface.getName());
             return null;
         }
 
@@ -476,8 +555,8 @@ public class GuanacoRouteBuilder extends RouteBuilder {
             }
         }
 
-        log.warn("[{}] YAML binds '{}' but no permitted subtype of {} matches that name — " +
-                "check for a typo in routes.yaml.", processorName, outcomeName, routeInterface.getName());
+        log.warn("[{}] YAML binds '{}' but no permitted subtype of {} matches that name — "
+                + "check for a typo in routes.yaml.", processorName, outcomeName, routeInterface.getName());
         return null;
     }
 }

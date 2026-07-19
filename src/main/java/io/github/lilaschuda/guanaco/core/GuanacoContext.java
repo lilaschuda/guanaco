@@ -5,12 +5,14 @@ import io.github.lilaschuda.guanaco.config.GuanacoConfig;
 import io.github.lilaschuda.guanaco.config.RouteConfig;
 import io.github.lilaschuda.guanaco.annotation.GuanacoRoute;
 import io.github.lilaschuda.guanaco.dsl.Processor;
+import org.apache.camel.AggregationStrategy;
 import org.reflections.Reflections;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import java.io.InputStream;
 import java.util.stream.Collectors;
@@ -22,10 +24,10 @@ import org.apache.camel.support.ResourceHelper;
 /**
  * Main entry point for camel-guanaco.
  *
- * <p>
- * Usage:
+ * <p>Usage:
  * <pre>{@code
  * GuanacoContext ctx = new GuanacoContext("org.myapp");
+ * ctx.registerAggregationStrategy("orderMergeStrategy", new OrderMergeStrategy()); // if using Aggregate
  * ctx.wireRoutes(); // scans, validates, registers routes — call BEFORE start()
  * ctx.start();      // real Camel startup — routes, consumers, etc.
  * // ...
@@ -40,10 +42,48 @@ public class GuanacoContext extends SpringCamelContext {
     private final ConfigLoader configLoader;
     private final TopologyInspector inspector;
 
+    // Populated via registerAggregationStrategy() before wireRoutes() is
+    // called. A frozen snapshot is handed to each GuanacoRouteBuilder at
+    // wireRoutes() time — resolution then happens exactly once per route,
+    // at route-graph-construction time, never per-message.
+    private final Map<String, AggregationStrategy> aggregationStrategies = new ConcurrentHashMap<>();
+
     public GuanacoContext(String basePackage) {
         this.basePackage = basePackage;
         this.configLoader = new ConfigLoader();
         this.inspector = new TopologyInspector();
+    }
+
+    /**
+     * Registers a native, Java-constructed AggregationStrategy under a name
+     * that {@code aggregate.strategyRef} in routes.yaml/json can reference.
+     * No Spring bean lookup, no reflection — a plain, explicit, closed-world
+     * name-to-instance registration.
+     *
+     * <p>Call this before {@link #wireRoutes()}; registrations made
+     * afterward are not guaranteed to be visible to already-built routes.
+     *
+     * @throws IllegalArgumentException if name or strategy is null/blank,
+     *         or if a strategy is already registered under this name —
+     *         registration is explicit and deterministic, never silently
+     *         overwritten.
+     */
+    public void registerAggregationStrategy(String name, AggregationStrategy strategy) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("AggregationStrategy name must be provided and non-blank.");
+        }
+        if (strategy == null) {
+            throw new IllegalArgumentException("AggregationStrategy instance must not be null.");
+        }
+
+        AggregationStrategy previous = aggregationStrategies.putIfAbsent(name, strategy);
+        if (previous != null) {
+            throw new IllegalArgumentException(
+                    "An AggregationStrategy is already registered under name '" + name + "'. " +
+                    "Registration is explicit and must be unique — choose a different name.");
+        }
+
+        log.info("Registered AggregationStrategy '{}'", name);
     }
 
     /**
@@ -60,18 +100,14 @@ public class GuanacoContext extends SpringCamelContext {
         Map<String, RouteConfig> routeConfigs = config.getRoutes();
 
         if (routeConfigs == null || routeConfigs.isEmpty()) {
-            log.warn("No routes defined in routes.yaml — nothing to wire");
+            log.warn("No routes defined — nothing to wire");
             return;
         }
 
-        // Single, boot-time-only, package-bounded scan producing the frozen,
-        // closed-world registry of every concrete RouteOutcome implementation.
-        // Built exactly once here, reused below for every processor's binding
-        // validation. No further reflection or classpath scanning occurs after
-        // this point — runtime dispatch only ever compares an already-known
-        // Class against this frozen map or against a processor's own sealed
-        // hierarchy.
         RouteOutcomeRegistry outcomeRegistry = RouteOutcomeRegistry.scan(basePackage);
+
+        // Frozen snapshot handed to every builder — see field javadoc.
+        Map<String, AggregationStrategy> strategiesSnapshot = Map.copyOf(aggregationStrategies);
 
         Reflections reflections = new Reflections(basePackage);
         Set<Class<?>> rawProcessorClasses = reflections.getTypesAnnotatedWith(GuanacoRoute.class);
@@ -89,7 +125,7 @@ public class GuanacoContext extends SpringCamelContext {
             RouteConfig routeConfig = routeConfigs.get(name);
 
             if (routeConfig == null) {
-                log.warn("No routes.yaml entry found for processor '{}' — skipping. "
+                log.warn("No routes config entry found for processor '{}' — skipping. "
                         + "Add a '{}:' block under 'routes:' to activate it.", name, name);
                 continue;
             }
@@ -102,12 +138,13 @@ public class GuanacoContext extends SpringCamelContext {
                     .collect(Collectors.toSet());
 
             validator.validate(name, outcomeNames, routeConfig, outcomeRegistry);
+            validator.validateAggregateConfig(name, routeConfig);
 
             Processor<RouteOutcome<?>> instance
                     = (Processor<RouteOutcome<?>>) processorClass.getDeclaredConstructor().newInstance();
 
             GuanacoRouteBuilder builder = new GuanacoRouteBuilder(
-                    instance, routeInterface, routeConfig, name, outcomeRegistry);
+                    instance, routeInterface, routeConfig, name, outcomeRegistry, strategiesSnapshot);
             this.addRoutes(builder);
 
             log.info("[{}] Route registered: {} → {} outcome(s)", name, routeConfig.getFrom(), outcomeNames.size());
@@ -117,21 +154,9 @@ public class GuanacoContext extends SpringCamelContext {
         log.info("=== camel-guanaco route wiring complete ===");
     }
 
-    /**
-     * Legacy compatibility: loads <route> definitions from a Spring-flavored
-     * camel-context.xml without requiring a Spring ApplicationContext.
-     *
-     * Only <route> elements are honored — beans, data formats, property
-     * placeholders, and other Spring-wired concerns are ignored.
-     *
-     * Call this BEFORE start(). Missing files are logged and skipped, not fatal
-     * — this is meant as an opt-in migration aid.
-     */
     public void loadLegacyXmlRoutes(String classpathResource) throws Exception {
-        // 1. Resolve the resource from the classpath using Camel's native helper
         Resource resource = ResourceHelper.resolveMandatoryResource(this, "classpath:" + classpathResource);
 
-        // 2. Check if the resource actually contains bytes to read safely
         try (InputStream is = resource.getInputStream()) {
             if (is == null) {
                 log.info("No legacy XML routes found at '{}' — skipping", classpathResource);
@@ -143,11 +168,7 @@ public class GuanacoContext extends SpringCamelContext {
         }
 
         log.info("Parsing <route> definitions out of legacy footprint: '{}'", classpathResource);
-
-        // 3. Let Camel's native routes loader isolate and bind the <route> elements.
-        // This automatically skips <beans>, property placeholders, etc.
         PluginHelper.getRoutesLoader(this).loadRoutes(resource);
-
         log.info("Successfully isolated and loaded legacy routes from '{}'", classpathResource);
     }
 

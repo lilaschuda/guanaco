@@ -1,5 +1,6 @@
 package io.github.lilaschuda.guanaco.core;
 
+import io.github.lilaschuda.guanaco.config.GuanacoAggregateConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoConfig.ValidationMode;
 import io.github.lilaschuda.guanaco.config.RouteConfig;
 import org.slf4j.Logger;
@@ -11,32 +12,36 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Validates that YAML bindings for a processor are resolvable, using two
- * distinct sources of truth:
+ * Validates RouteConfig integrity before routes are built, using two
+ * distinct kinds of check:
  *
  * <ul>
- *   <li><b>declaredOutcomes</b> — the processor's own sealed hierarchy
- *       permits. Every one of these MUST have a YAML binding: the processor
- *       can legitimately return any of them directly, so a missing binding
- *       here is always an error, regardless of mode severity.</li>
- *   <li><b>registry</b> — the frozen, boot-time closed-world scan of every
- *       concrete RouteOutcome implementation in the base package. A YAML key
- *       that isn't in declaredOutcomes is still legitimate if it resolves
- *       against this registry — that's the case for a Split/Multicast
- *       destination that isn't part of this processor's own sealed
- *       hierarchy (e.g. a shared, cross-cutting outcome type). A YAML key
- *       found in neither is a genuine typo or an unresolvable reference.</li>
+ *   <li><b>Binding validation</b> — see {@link #validate}. Mode-sensitive
+ *       (STRICT/PERMISSIVE/SILENT), as documented there.</li>
+ *   <li><b>Structural / security guardrails</b> — the scripting-scheme
+ *       deny-list (checked inside {@link #validate}) and
+ *       {@link #validateAggregateConfig}. Both are always terminal,
+ *       regardless of ValidationMode: there is no sensible "permissive"
+ *       degradation for a forbidden component scheme or a structurally
+ *       incomplete aggregate block.</li>
  * </ul>
- *
- * <pre>
- * STRICT     — missing OR unresolved bindings → startup failure
- * PERMISSIVE — missing bindings → failure; unresolved bindings → warn + ignore
- * SILENT     — missing bindings → warn only; unresolved bindings → ignore silently
- * </pre>
  */
 public class BindingValidator {
 
     private static final Logger log = LoggerFactory.getLogger(BindingValidator.class);
+
+    /**
+     * Component schemes that permit dynamic script interpretation at the
+     * endpoint. 'language' is the real, exploitable Camel component scheme
+     * (language:groovy:..., language:js:...); the rest are listed as
+     * defense-in-depth in case a component with that exact scheme name is
+     * ever added to the classpath. Matched against the URI's actual scheme
+     * (the substring before the first ':'), never via substring containment
+     * — a topic literally named "kafka:python:events" must not trip this.
+     */
+    private static final Set<String> FORBIDDEN_SCHEMES = Set.of(
+            "language", "groovy", "js", "javascript", "mvel", "ognl", "python"
+    );
 
     private final ValidationMode mode;
 
@@ -47,6 +52,8 @@ public class BindingValidator {
 
     public void validate(String processorName, Set<String> declaredOutcomes, RouteConfig routeConfig,
                           RouteOutcomeRegistry registry) {
+        validateNoForbiddenSchemes(processorName, routeConfig);
+
         Map<String, List<String>> bindings = routeConfig.getBindings();
 
         if (bindings == null || bindings.isEmpty()) {
@@ -59,17 +66,10 @@ public class BindingValidator {
 
         Set<String> configuredKeys = bindings.keySet();
 
-        // Outcomes the processor's own sealed hierarchy permits, but missing
-        // from YAML — always an error, since the processor can legitimately
-        // return these directly regardless of any Split/Multicast usage.
         Set<String> missingBindings = declaredOutcomes.stream()
             .filter(o -> !configuredKeys.contains(o))
             .collect(Collectors.toSet());
 
-        // YAML keys outside this processor's sealed hierarchy. Legitimate if
-        // they resolve against the frozen closed-world registry (a real
-        // RouteOutcome implementation exists somewhere in the scanned
-        // package) — that's the Split/Multicast cross-cutting case.
         Set<String> unresolvedBindings = configuredKeys.stream()
             .filter(k -> !declaredOutcomes.contains(k))
             .filter(k -> !registry.contains(k))
@@ -106,6 +106,91 @@ public class BindingValidator {
         if (missingBindings.isEmpty() && unresolvedBindings.isEmpty()) {
             log.info("[{}] Bindings validated OK — {} routes configured", processorName, bindings.size());
         }
+    }
+
+    /**
+     * Validates the structural shape of an optional {@code aggregate:}
+     * block. A no-op if none is declared. Always terminal on failure,
+     * regardless of ValidationMode — see class-level javadoc.
+     *
+     * <p>This only validates shape (required fields present, at least one
+     * completion condition set). It does NOT check whether strategyRef
+     * actually resolves to a registered AggregationStrategy — that
+     * resolution, and its own terminal failure on a missing strategy, happens
+     * later, during route compilation in GuanacoRouteBuilder, since it
+     * depends on what's been registered via
+     * {@code GuanacoContext.registerAggregationStrategy(...)} rather than on
+     * the config file alone.
+     */
+    public void validateAggregateConfig(String processorName, RouteConfig routeConfig) {
+        GuanacoAggregateConfig agg = routeConfig.getAggregate();
+        if (agg == null) {
+            return;
+        }
+
+        if (agg.getCorrelationHeader() == null || agg.getCorrelationHeader().isBlank()) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] aggregate.correlationHeader must be provided and non-blank.");
+        }
+
+        if (agg.getStrategyRef() == null || agg.getStrategyRef().isBlank()) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] aggregate.strategyRef must be provided and non-blank.");
+        }
+
+        boolean hasSize = agg.getCompletionSize() != null && agg.getCompletionSize() > 0;
+        boolean hasTimeout = agg.getCompletionTimeoutMs() != null && agg.getCompletionTimeoutMs() > 0;
+
+        if (!hasSize && !hasTimeout) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] aggregate block must declare at least one completion " +
+                    "condition greater than zero: completionSize or completionTimeoutMs.");
+        }
+
+        log.info("[{}] Aggregate config validated OK — correlationHeader='{}', strategyRef='{}'",
+                processorName, agg.getCorrelationHeader(), agg.getStrategyRef());
+    }
+
+    /**
+     * Rejects any 'from' or binding endpoint URI whose scheme (the substring
+     * before the first ':') is a known scripting component scheme. Matched
+     * on scheme only, never via substring containment — deliberately so that
+     * a legitimate URI like "kafka:python:events-topic" (scheme = "kafka")
+     * is never mistakenly flagged.
+     */
+    private void validateNoForbiddenSchemes(String processorName, RouteConfig routeConfig) {
+        checkUri(processorName, "from", routeConfig.getFrom());
+
+        if (routeConfig.getBindings() != null) {
+            for (Map.Entry<String, List<String>> entry : routeConfig.getBindings().entrySet()) {
+                List<String> uris = entry.getValue();
+                if (uris == null) continue;
+                for (String uri : uris) {
+                    checkUri(processorName, "bindings." + entry.getKey(), uri);
+                }
+            }
+        }
+    }
+
+    private void checkUri(String processorName, String fieldDescription, String uri) {
+        if (uri == null) return;
+
+        String scheme = extractScheme(uri);
+        if (scheme != null && FORBIDDEN_SCHEMES.contains(scheme)) {
+            String msg = String.format(
+                "[%s] Forbidden scripting component scheme '%s' found in %s ('%s'). " +
+                "Guanaco does not permit dynamic script interpretation at endpoints, to preserve " +
+                "deterministic, compile-time-checked routing.",
+                processorName, scheme, fieldDescription, uri);
+            log.error(msg);
+            throw new ForbiddenComponentException(msg);
+        }
+    }
+
+    private String extractScheme(String uri) {
+        int idx = uri.indexOf(':');
+        if (idx <= 0) return null;
+        return uri.substring(0, idx);
     }
 
     private void handleMissing(String message) {
