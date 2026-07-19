@@ -1,0 +1,6 @@
+{
+  "framework": { "validation": "STRICT" },
+  "routes": {
+    "FromJson": { "from": "direct:json", "bindings": { "ToInventory": "mock:json" } }
+  }
+}

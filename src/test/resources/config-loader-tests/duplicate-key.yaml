@@ -1,0 +1,9 @@
+framework:
+  validation: STRICT
+routes:
+  OrderProcessor:
+    from: direct:orders
+    bindings:
+      ToInventory: mock:inventory
+    bindings:
+      ToPayment: mock:payment

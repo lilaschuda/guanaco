@@ -1,0 +1,7 @@
+framework:
+  validation: STRICT
+routes:
+  FromYaml:
+    from: direct:yaml
+    bindings:
+      ToInventory: mock:yaml
