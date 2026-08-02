@@ -1,6 +1,7 @@
 package io.github.lilaschuda.guanaco.core;
 
 import io.github.lilaschuda.guanaco.config.GuanacoAggregateConfig;
+import io.github.lilaschuda.guanaco.config.GuanacoIdempotentConfig;
 import io.github.lilaschuda.guanaco.config.RouteConfig;
 import io.github.lilaschuda.guanaco.dsl.Processor;
 import io.github.lilaschuda.guanaco.eip.Drop;
@@ -11,7 +12,6 @@ import org.apache.camel.Expression;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.model.ChoiceDefinition;
-import org.apache.camel.model.RouteDefinition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,6 +20,9 @@ import java.util.Map;
 import org.apache.camel.AggregationStrategy;
 import org.apache.camel.model.AggregateDefinition;
 import org.apache.camel.model.ProcessorDefinition;
+import org.apache.camel.model.RouteDefinition;
+import org.apache.camel.spi.IdempotentRepository;
+import org.apache.camel.support.processor.idempotent.MemoryIdempotentRepository;
 
 /**
  * Generates a Camel {@link RouteBuilder} route from a Guanaco {@link Processor}
@@ -121,18 +124,28 @@ public class GuanacoRouteBuilder extends RouteBuilder {
         producerTemplate = getContext().createProducerTemplate();
         configureErrorHandler();
 
-        // Change type to ProcessorDefinition<?> to allow polymorphic EIP chaining
-        ProcessorDefinition<?> route = from(config.getFrom())
+        RouteDefinition route = from(config.getFrom())
                 .routeId("guanaco-" + processorName);
 
-        if (config.getAggregate() != null) {
-            route = wireAggregate(route, config.getAggregate());
+        // Raw type deliberately, matching the existing raw ChoiceDefinition
+        // convention below — sidesteps fighting Camel's self-referencing
+        // generic DSL types across a variable that's reassigned conditionally.
+        ProcessorDefinition pipeline = route;
+
+        // Idempotent always wraps outermost, then Aggregate — not configurable.
+        // Neither wireIdempotent nor wireAggregate call .end(): they return the
+        // block itself so what follows nests INSIDE it as a genuine child,
+        // which is what Camel's model actually requires.
+        if (config.getIdempotent() != null) {
+            pipeline = wireIdempotent(pipeline, config.getIdempotent());
         }
 
-        // This step now neatly appends inside the aggregator block if it exists
-        ProcessorDefinition<?> afterProcess = route.process(this::dispatchOutcome);
+        if (config.getAggregate() != null) {
+            pipeline = wireAggregate(pipeline, config.getAggregate());
+        }
 
-        // .choice() seamlessly transitions back to a standard ChoiceDefinition
+        ProcessorDefinition afterProcess = pipeline.process(this::dispatchOutcome);
+
         ChoiceDefinition choice = afterProcess.choice();
 
         choice.when(this::isDrop)
@@ -174,7 +187,8 @@ public class GuanacoRouteBuilder extends RouteBuilder {
      * @throws GuanacoRouteBuilderException if strategyRef doesn't resolve to a
      * registered AggregationStrategy.
      */
-    private ProcessorDefinition<?> wireAggregate(ProcessorDefinition<?> route, GuanacoAggregateConfig aggConfig) {
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private ProcessorDefinition wireAggregate(ProcessorDefinition parent, GuanacoAggregateConfig aggConfig) {
         AggregationStrategy strategy = aggregationStrategies.get(aggConfig.getStrategyRef());
 
         if (strategy == null) {
@@ -190,8 +204,7 @@ public class GuanacoRouteBuilder extends RouteBuilder {
                 processorName, aggConfig.getCorrelationHeader(), aggConfig.getStrategyRef(),
                 aggConfig.getCompletionSize(), aggConfig.getCompletionTimeoutMs());
 
-        // Open the aggregate block against the fluent route definition
-        AggregateDefinition aggregate = route.aggregate(header(aggConfig.getCorrelationHeader()), strategy);
+        AggregateDefinition aggregate = parent.aggregate(header(aggConfig.getCorrelationHeader()), strategy);
 
         if (aggConfig.getCompletionSize() != null) {
             aggregate = aggregate.completionSize(aggConfig.getCompletionSize());
@@ -200,7 +213,7 @@ public class GuanacoRouteBuilder extends RouteBuilder {
             aggregate = aggregate.completionTimeout(aggConfig.getCompletionTimeoutMs());
         }
 
-        // Return the open AggregateDefinition so downstream steps are added as its children
+        // No .end() — same reasoning as wireIdempotent above.
         return aggregate;
     }
 
@@ -558,5 +571,36 @@ public class GuanacoRouteBuilder extends RouteBuilder {
         log.warn("[{}] YAML binds '{}' but no permitted subtype of {} matches that name — "
                 + "check for a typo in routes.yaml.", processorName, outcomeName, routeInterface.getName());
         return null;
+    }
+
+    /**
+     * Wires a Camel native idempotentConsumer() step before Aggregate (if any)
+     * and before the route's processor. A duplicate — recognized via
+     * messageIdHeader, resolved through Camel's type-safe header(name) builder
+     * — is absorbed here and never reaches anything downstream. Uses
+     * MemoryIdempotentRepository in v1.0, wrapped in
+     * {@link LoggingIdempotentRepository} so a skipped duplicate is always
+     * logged regardless of Camel's own internal logging configuration.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private ProcessorDefinition wireIdempotent(ProcessorDefinition parent, GuanacoIdempotentConfig idempotentConfig) {
+        log.info("[{}] Wiring Idempotent Consumer — messageIdHeader='{}', capacity={}, eager={}, "
+                + "removeOnFailure={}, skipDuplicate={}",
+                processorName, idempotentConfig.getMessageIdHeader(), idempotentConfig.resolveCapacity(),
+                idempotentConfig.resolveEager(), idempotentConfig.resolveRemoveOnFailure(),
+                idempotentConfig.resolveSkipDuplicate());
+
+        IdempotentRepository memoryRepo
+                = MemoryIdempotentRepository.memoryIdempotentRepository(idempotentConfig.resolveCapacity());
+
+        IdempotentRepository repository = new LoggingIdempotentRepository(
+                memoryRepo, processorName, idempotentConfig.getMessageIdHeader());
+
+        // No .end() — returning the block itself so dispatchOutcome/choice()
+        // (or a following Aggregate block) nests inside it as a real child.
+        return parent.idempotentConsumer(header(idempotentConfig.getMessageIdHeader()), repository)
+                .eager(idempotentConfig.resolveEager())
+                .removeOnFailure(idempotentConfig.resolveRemoveOnFailure())
+                .skipDuplicate(idempotentConfig.resolveSkipDuplicate());
     }
 }

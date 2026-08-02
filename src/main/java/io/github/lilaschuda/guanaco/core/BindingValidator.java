@@ -2,6 +2,7 @@ package io.github.lilaschuda.guanaco.core;
 
 import io.github.lilaschuda.guanaco.config.GuanacoAggregateConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoConfig.ValidationMode;
+import io.github.lilaschuda.guanaco.config.GuanacoIdempotentConfig;
 import io.github.lilaschuda.guanaco.config.RouteConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -207,5 +208,30 @@ public class BindingValidator {
             case PERMISSIVE -> log.warn("PERMISSIVE MODE — ignoring unresolved binding. {}", message);
             case SILENT -> {}
         }
+    }
+
+    /**
+     * Validates the structural shape of an optional {@code idempotent:} block.
+     * A no-op if none is declared. Always terminal on failure, regardless of
+     * ValidationMode — same reasoning as {@link #validateAggregateConfig}.
+     */
+    public void validateIdempotentConfig(String processorName, RouteConfig routeConfig) {
+        GuanacoIdempotentConfig idempotent = routeConfig.getIdempotent();
+        if (idempotent == null) {
+            return;
+        }
+
+        if (idempotent.getMessageIdHeader() == null || idempotent.getMessageIdHeader().isBlank()) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] idempotent.messageIdHeader must be provided and non-blank.");
+        }
+
+        if (idempotent.getCapacity() != null && idempotent.getCapacity() <= 0) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] idempotent.capacity must be greater than zero if specified.");
+        }
+
+        log.info("[{}] Idempotent config validated OK — messageIdHeader='{}', capacity={}",
+                processorName, idempotent.getMessageIdHeader(), idempotent.resolveCapacity());
     }
 }

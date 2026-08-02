@@ -24,6 +24,7 @@ public class RouteConfig {
     private Map<String, List<String>> bindings = new LinkedHashMap<>();
     private ErrorHandlerConfig errorHandler;
     private GuanacoAggregateConfig aggregate;
+    private GuanacoIdempotentConfig idempotent;
 
     public String getFrom() { return from; }
     public void setFrom(String from) { this.from = from; }
@@ -37,6 +38,9 @@ public class RouteConfig {
     public GuanacoAggregateConfig getAggregate() { return aggregate; }
     public void setAggregate(GuanacoAggregateConfig aggregate) { this.aggregate = aggregate; }
 
+    public GuanacoIdempotentConfig getIdempotent() { return idempotent; }
+    public void setIdempotent(GuanacoIdempotentConfig idempotent) { this.idempotent = idempotent; }
+    
     public static class ErrorHandlerConfig {
         private String deadLetter;
         private int maxRetries = 0;

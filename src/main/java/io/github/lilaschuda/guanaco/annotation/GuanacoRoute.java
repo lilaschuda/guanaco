@@ -4,7 +4,7 @@ import java.lang.annotation.*;
 
 /**
  * Marks a class as a Guanaco route processor.
- * The annotated class must implement {@link org.guanaco.dsl.Processor}.
+ * The annotated class must implement {@link io.github.lilaschuda.guanaco.dsl.Processor}.
  *
  * The 'from' endpoint URI is declared in routes.yaml, not here,
  * keeping operational config out of compiled code.
