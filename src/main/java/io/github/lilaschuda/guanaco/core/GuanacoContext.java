@@ -139,6 +139,8 @@ public class GuanacoContext extends SpringCamelContext {
 
             validator.validate(name, outcomeNames, routeConfig, outcomeRegistry);
             validator.validateAggregateConfig(name, routeConfig);
+            validator.validateIdempotentConfig(name, routeConfig);
+            validator.validateResequenceConfig(name, routeConfig);
 
             Processor<RouteOutcome<?>> instance
                     = (Processor<RouteOutcome<?>>) processorClass.getDeclaredConstructor().newInstance();

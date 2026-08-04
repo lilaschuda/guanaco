@@ -25,7 +25,8 @@ public class RouteConfig {
     private ErrorHandlerConfig errorHandler;
     private GuanacoAggregateConfig aggregate;
     private GuanacoIdempotentConfig idempotent;
-
+    private GuanacoResequenceConfig resequence;
+    
     public String getFrom() { return from; }
     public void setFrom(String from) { this.from = from; }
 
@@ -41,6 +42,9 @@ public class RouteConfig {
     public GuanacoIdempotentConfig getIdempotent() { return idempotent; }
     public void setIdempotent(GuanacoIdempotentConfig idempotent) { this.idempotent = idempotent; }
     
+    public GuanacoResequenceConfig getResequence() { return resequence; }
+    public void setResequence(GuanacoResequenceConfig resequence) { this.resequence = resequence; }
+
     public static class ErrorHandlerConfig {
         private String deadLetter;
         private int maxRetries = 0;

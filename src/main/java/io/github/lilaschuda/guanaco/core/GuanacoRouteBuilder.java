@@ -2,6 +2,7 @@ package io.github.lilaschuda.guanaco.core;
 
 import io.github.lilaschuda.guanaco.config.GuanacoAggregateConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoIdempotentConfig;
+import io.github.lilaschuda.guanaco.config.GuanacoResequenceConfig;
 import io.github.lilaschuda.guanaco.config.RouteConfig;
 import io.github.lilaschuda.guanaco.dsl.Processor;
 import io.github.lilaschuda.guanaco.eip.Drop;
@@ -20,6 +21,7 @@ import java.util.Map;
 import org.apache.camel.AggregationStrategy;
 import org.apache.camel.model.AggregateDefinition;
 import org.apache.camel.model.ProcessorDefinition;
+import org.apache.camel.model.ResequenceDefinition;
 import org.apache.camel.model.RouteDefinition;
 import org.apache.camel.spi.IdempotentRepository;
 import org.apache.camel.support.processor.idempotent.MemoryIdempotentRepository;
@@ -127,17 +129,15 @@ public class GuanacoRouteBuilder extends RouteBuilder {
         RouteDefinition route = from(config.getFrom())
                 .routeId("guanaco-" + processorName);
 
-        // Raw type deliberately, matching the existing raw ChoiceDefinition
-        // convention below — sidesteps fighting Camel's self-referencing
-        // generic DSL types across a variable that's reassigned conditionally.
         ProcessorDefinition pipeline = route;
 
-        // Idempotent always wraps outermost, then Aggregate — not configurable.
-        // Neither wireIdempotent nor wireAggregate call .end(): they return the
-        // block itself so what follows nests INSIDE it as a genuine child,
-        // which is what Camel's model actually requires.
+        // Fixed order — Idempotent, then Resequence, then Aggregate. Not configurable.
         if (config.getIdempotent() != null) {
             pipeline = wireIdempotent(pipeline, config.getIdempotent());
+        }
+
+        if (config.getResequence() != null) {
+            pipeline = wireResequence(pipeline, config.getResequence());
         }
 
         if (config.getAggregate() != null) {
@@ -602,5 +602,50 @@ public class GuanacoRouteBuilder extends RouteBuilder {
                 .eager(idempotentConfig.resolveEager())
                 .removeOnFailure(idempotentConfig.resolveRemoveOnFailure())
                 .skipDuplicate(idempotentConfig.resolveSkipDuplicate());
+    }
+
+    /**
+     * Wires a Camel native resequence() step. STREAM mode buffers within a
+     * sliding window and releases as soon as ordering allows; BATCH mode
+     * collects a full batch then releases it fully sorted. Neither branch calls
+     * .end() — same reasoning as wireIdempotent/wireAggregate: this returns the
+     * block itself so what follows nests inside it as a genuine child, which is
+     * what Camel's model requires (an empty block with .end() called
+     * immediately fails at route-build time with "Definition has no children").
+     *
+     * NOTE: .stream()/.batch()/.timeout()/.capacity()/.size()/.rejectOld() are
+     * Camel's documented ResequenceDefinition DSL methods, but unverified
+     * against your exact camel.version by an actual compile here. If any of
+     * these method names or return types don't match, the compiler error will
+     * point at the exact line — same pattern as the .split()/.end()/
+     * MemoryIdempotentRepository issues hit earlier in this project.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private ProcessorDefinition wireResequence(ProcessorDefinition parent, GuanacoResequenceConfig reseqConfig) {
+        log.info("[{}] Wiring Resequence — sequenceHeader='{}', mode={}, capacity={}, timeoutMs={}, rejectOld={}",
+                processorName, reseqConfig.getSequenceHeader(), reseqConfig.getMode(),
+                reseqConfig.getCapacity(), reseqConfig.getTimeoutMs(), reseqConfig.getRejectOld());
+
+        ResequenceDefinition resequence = parent.resequence(header(reseqConfig.getSequenceHeader()));
+
+        if (reseqConfig.getMode() == GuanacoResequenceConfig.Mode.STREAM) {
+            resequence = resequence.stream();
+            resequence = resequence.timeout(reseqConfig.resolveStreamTimeoutMs());
+            resequence = resequence.capacity(reseqConfig.resolveStreamCapacity());
+
+            if (reseqConfig.resolveRejectOld()) {
+                resequence = resequence.rejectOld();
+            }
+        } else {
+            resequence = resequence.batch();
+            if (reseqConfig.getCapacity() != null) {
+                resequence = resequence.size(reseqConfig.getCapacity());
+            }
+            if (reseqConfig.getTimeoutMs() != null) {
+                resequence = resequence.timeout(reseqConfig.getTimeoutMs());
+            }
+        }
+
+        return resequence;
     }
 }

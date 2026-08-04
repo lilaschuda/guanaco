@@ -2,6 +2,7 @@ package io.github.lilaschuda.guanaco.core;
 
 import io.github.lilaschuda.guanaco.config.GuanacoAggregateConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoConfig.ValidationMode;
+import io.github.lilaschuda.guanaco.config.GuanacoResequenceConfig;
 import io.github.lilaschuda.guanaco.config.RouteConfig;
 import org.junit.jupiter.api.Test;
 
@@ -135,5 +136,150 @@ class BindingValidatorGuardrailTest {
 
     private RouteOutcomeRegistry emptyRegistry() {
         return RouteOutcomeRegistryTestSupport.of();
+    }
+
+    // --- Resequence structural validation ---
+    @Test
+    void noResequenceBlock_isANoOp() {
+        RouteConfig config = new RouteConfig();
+        assertThatCode(() -> validator.validateResequenceConfig("Test", config))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void validStreamConfig_passes() {
+        RouteConfig config = new RouteConfig();
+        GuanacoResequenceConfig reseq = new GuanacoResequenceConfig();
+        reseq.setSequenceHeader("seq");
+        reseq.setMode(GuanacoResequenceConfig.Mode.STREAM);
+        config.setResequence(reseq);
+
+        assertThatCode(() -> validator.validateResequenceConfig("Test", config))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void validBatchConfig_passes() {
+        RouteConfig config = new RouteConfig();
+        GuanacoResequenceConfig reseq = new GuanacoResequenceConfig();
+        reseq.setSequenceHeader("seq");
+        reseq.setMode(GuanacoResequenceConfig.Mode.BATCH);
+        reseq.setCapacity(100);
+        config.setResequence(reseq);
+
+        assertThatCode(() -> validator.validateResequenceConfig("Test", config))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void missingSequenceHeader_throwsInvalidRouteConfigurationException() {
+        RouteConfig config = new RouteConfig();
+        GuanacoResequenceConfig reseq = new GuanacoResequenceConfig();
+        reseq.setMode(GuanacoResequenceConfig.Mode.STREAM);
+        config.setResequence(reseq);
+
+        assertThatThrownBy(() -> validator.validateResequenceConfig("Test", config))
+                .isInstanceOf(InvalidRouteConfigurationException.class)
+                .hasMessageContaining("sequenceHeader");
+    }
+
+    @Test
+    void blankSequenceHeader_throwsInvalidRouteConfigurationException() {
+        RouteConfig config = new RouteConfig();
+        GuanacoResequenceConfig reseq = new GuanacoResequenceConfig();
+        reseq.setSequenceHeader("   ");
+        reseq.setMode(GuanacoResequenceConfig.Mode.STREAM);
+        config.setResequence(reseq);
+
+        assertThatThrownBy(() -> validator.validateResequenceConfig("Test", config))
+                .isInstanceOf(InvalidRouteConfigurationException.class)
+                .hasMessageContaining("sequenceHeader");
+    }
+
+    @Test
+    void missingMode_throwsInvalidRouteConfigurationException() {
+        RouteConfig config = new RouteConfig();
+        GuanacoResequenceConfig reseq = new GuanacoResequenceConfig();
+        reseq.setSequenceHeader("seq");
+        config.setResequence(reseq);
+
+        assertThatThrownBy(() -> validator.validateResequenceConfig("Test", config))
+                .isInstanceOf(InvalidRouteConfigurationException.class)
+                .hasMessageContaining("mode");
+    }
+
+    @Test
+    void batchModeWithNoCompletionCondition_throwsInvalidRouteConfigurationException() {
+        RouteConfig config = new RouteConfig();
+        GuanacoResequenceConfig reseq = new GuanacoResequenceConfig();
+        reseq.setSequenceHeader("seq");
+        reseq.setMode(GuanacoResequenceConfig.Mode.BATCH);
+        config.setResequence(reseq);
+
+        assertThatThrownBy(() -> validator.validateResequenceConfig("Test", config))
+                .isInstanceOf(InvalidRouteConfigurationException.class)
+                .hasMessageContaining("completion");
+    }
+
+    @Test
+    void batchModeWithZeroCapacityAndNoTimeout_throwsInvalidRouteConfigurationException() {
+        // capacity present but not > 0, and no timeout either — still no valid
+        // completion condition, same as leaving both unset.
+        RouteConfig config = new RouteConfig();
+        GuanacoResequenceConfig reseq = new GuanacoResequenceConfig();
+        reseq.setSequenceHeader("seq");
+        reseq.setMode(GuanacoResequenceConfig.Mode.BATCH);
+        reseq.setCapacity(0);
+        config.setResequence(reseq);
+
+        assertThatThrownBy(() -> validator.validateResequenceConfig("Test", config))
+                .isInstanceOf(InvalidRouteConfigurationException.class)
+                .hasMessageContaining("completion");
+    }
+
+    @Test
+    void batchModeWithRejectOldSet_throwsInvalidRouteConfigurationException() {
+        // rejectOld only has meaning in STREAM mode — its presence alongside
+        // BATCH almost certainly signals a typo in 'mode', so this is rejected
+        // outright rather than silently ignored.
+        RouteConfig config = new RouteConfig();
+        GuanacoResequenceConfig reseq = new GuanacoResequenceConfig();
+        reseq.setSequenceHeader("seq");
+        reseq.setMode(GuanacoResequenceConfig.Mode.BATCH);
+        reseq.setCapacity(100);
+        reseq.setRejectOld(true);
+        config.setResequence(reseq);
+
+        assertThatThrownBy(() -> validator.validateResequenceConfig("Test", config))
+                .isInstanceOf(InvalidRouteConfigurationException.class)
+                .hasMessageContaining("rejectOld");
+    }
+
+    @Test
+    void streamModeWithNegativeCapacity_throwsInvalidRouteConfigurationException() {
+        RouteConfig config = new RouteConfig();
+        GuanacoResequenceConfig reseq = new GuanacoResequenceConfig();
+        reseq.setSequenceHeader("seq");
+        reseq.setMode(GuanacoResequenceConfig.Mode.STREAM);
+        reseq.setCapacity(-5);
+        config.setResequence(reseq);
+
+        assertThatThrownBy(() -> validator.validateResequenceConfig("Test", config))
+                .isInstanceOf(InvalidRouteConfigurationException.class)
+                .hasMessageContaining("capacity");
+    }
+
+    @Test
+    void streamModeWithZeroTimeout_throwsInvalidRouteConfigurationException() {
+        RouteConfig config = new RouteConfig();
+        GuanacoResequenceConfig reseq = new GuanacoResequenceConfig();
+        reseq.setSequenceHeader("seq");
+        reseq.setMode(GuanacoResequenceConfig.Mode.STREAM);
+        reseq.setTimeoutMs(0L);
+        config.setResequence(reseq);
+
+        assertThatThrownBy(() -> validator.validateResequenceConfig("Test", config))
+                .isInstanceOf(InvalidRouteConfigurationException.class)
+                .hasMessageContaining("timeoutMs");
     }
 }

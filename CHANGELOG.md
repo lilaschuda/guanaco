@@ -5,9 +5,42 @@ All notable changes to Guanaco are documented here. Pre-1.0 versions are
 tagged release. Version numbers still advance one subversion per completed
 set of features, so the commit history stays easy to follow.
 
-## [Unreleased]
+## [0.4.0]
 
-## [0.3.0] - In progress
+### Added
+- **Resequencer EIP.** A `resequence:` block on `RouteConfig` reorders
+  incoming messages by a configured `sequenceHeader`, resolved via Camel's
+  type-safe `header(name)` builder. Supports both of Camel's resequencing
+  modes:
+  - **STREAM** — a sliding window that releases as ordering allows;
+    `capacity` (default 1000) and `timeoutMs` (default 1000ms) both
+    optional with sensible defaults. `rejectOld` (default `true`) rejects
+    a message older than the last released sequence number rather than
+    waiting for it indefinitely.
+  - **BATCH** — collects a full batch, sorts it completely, then releases
+    it as one sorted unit. Requires at least one of `capacity`/`timeoutMs`,
+    matching Aggregate's completion-condition validation shape.
+- **Fixed, non-configurable three-stage pipeline order** when Idempotent,
+  Resequence, and Aggregate are all configured on one route: Idempotent
+  Consumer runs first (drop cheap duplicates before allocating sequence
+  buffer memory), then Resequence (so an order-sensitive
+  `AggregationStrategy` always receives messages in strict sequence), then
+  Aggregate.
+- `rejectOld` validation: rejected at boot if set alongside BATCH mode,
+  since it has no meaning there and its presence most likely signals a
+  typo in `mode`.
+
+### Fixed
+- `ResequenceDefinition.rejectOld()` is a no-argument toggle in the Camel
+  version this project targets, not a boolean setter — corrected the
+  wiring to call it conditionally rather than pass a boolean argument.
+
+This completes Tier 1 of the roadmap (Aggregate, Idempotent Consumer,
+Resequencer) — all three "natural engine extension" EIPs identified early
+in the v0.2 planning are now implemented, validated, and tested, including
+their interaction when combined on a single route.
+
+## [0.3.0]
 
 ### Added
 - **Configuration format auto-detection.** `ConfigLoader` now supports both
