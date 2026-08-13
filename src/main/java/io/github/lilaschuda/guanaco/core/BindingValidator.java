@@ -1,5 +1,6 @@
 package io.github.lilaschuda.guanaco.core;
 
+import io.github.lilaschuda.guanaco.config.BindingTarget;
 import io.github.lilaschuda.guanaco.config.GuanacoAggregateConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoConfig.ValidationMode;
 import io.github.lilaschuda.guanaco.config.GuanacoIdempotentConfig;
@@ -8,38 +9,16 @@ import io.github.lilaschuda.guanaco.config.RouteConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * Validates RouteConfig integrity before routes are built, using two distinct
- * kinds of check:
- *
- * <ul>
- * <li><b>Binding validation</b> — see {@link #validate}. Mode-sensitive
- * (STRICT/PERMISSIVE/SILENT), as documented there.</li>
- * <li><b>Structural / security guardrails</b> — the scripting-scheme deny-list
- * (checked inside {@link #validate}) and {@link #validateAggregateConfig}. Both
- * are always terminal, regardless of ValidationMode: there is no sensible
- * "permissive" degradation for a forbidden component scheme or a structurally
- * incomplete aggregate block.</li>
- * </ul>
- */
 public class BindingValidator {
 
     private static final Logger log = LoggerFactory.getLogger(BindingValidator.class);
 
-    /**
-     * Component schemes that permit dynamic script interpretation at the
-     * endpoint. 'language' is the real, exploitable Camel component scheme
-     * (language:groovy:..., language:js:...); the rest are listed as
-     * defense-in-depth in case a component with that exact scheme name is ever
-     * added to the classpath. Matched against the URI's actual scheme (the
-     * substring before the first ':'), never via substring containment — a
-     * topic literally named "kafka:python:events" must not trip this.
-     */
     private static final Set<String> FORBIDDEN_SCHEMES = Set.of(
             "language", "groovy", "js", "javascript", "mvel", "ognl", "python"
     );
@@ -52,15 +31,15 @@ public class BindingValidator {
     }
 
     public void validate(String processorName, Set<String> declaredOutcomes, RouteConfig routeConfig,
-            RouteOutcomeRegistry registry) {
+                          RouteOutcomeRegistry registry) {
         validateNoForbiddenSchemes(processorName, routeConfig);
 
-        Map<String, List<String>> bindings = routeConfig.getBindings();
+        Map<String, List<BindingTarget>> bindings = routeConfig.getBindings();
 
         if (bindings == null || bindings.isEmpty()) {
             String msg = String.format(
-                    "[%s] No bindings declared in routes.yaml. "
-                    + "Expected bindings for: %s", processorName, declaredOutcomes);
+                "[%s] No bindings declared in routes config. " +
+                "Expected bindings for: %s", processorName, declaredOutcomes);
             handleMissing(msg);
             return;
         }
@@ -68,39 +47,39 @@ public class BindingValidator {
         Set<String> configuredKeys = bindings.keySet();
 
         Set<String> missingBindings = declaredOutcomes.stream()
-                .filter(o -> !configuredKeys.contains(o))
-                .collect(Collectors.toSet());
+            .filter(o -> !configuredKeys.contains(o))
+            .collect(Collectors.toSet());
 
         Set<String> unresolvedBindings = configuredKeys.stream()
-                .filter(k -> !declaredOutcomes.contains(k))
-                .filter(k -> !registry.contains(k))
-                .collect(Collectors.toSet());
+            .filter(k -> !declaredOutcomes.contains(k))
+            .filter(k -> !registry.contains(k))
+            .collect(Collectors.toSet());
 
         Set<String> crossCuttingBindings = configuredKeys.stream()
-                .filter(k -> !declaredOutcomes.contains(k))
-                .filter(registry::contains)
-                .collect(Collectors.toSet());
+            .filter(k -> !declaredOutcomes.contains(k))
+            .filter(registry::contains)
+            .collect(Collectors.toSet());
 
         if (!missingBindings.isEmpty()) {
             String msg = String.format(
-                    "[%s] Missing YAML bindings for route outcomes declared in code: %s. "
-                    + "Add these to routes.yaml under '%s.bindings'.",
-                    processorName, missingBindings, processorName);
+                "[%s] Missing bindings for route outcomes declared in code: %s. " +
+                "Add these to '%s.bindings'.",
+                processorName, missingBindings, processorName);
             handleMissing(msg);
         }
 
         if (!unresolvedBindings.isEmpty()) {
             String msg = String.format(
-                    "[%s] YAML declares bindings for unrecognized outcomes: %s. "
-                    + "These don't match any RouteOutcome implementation found during startup scanning. "
-                    + "Check for typos, or confirm the class exists within the scanned base package.",
-                    processorName, unresolvedBindings);
+                "[%s] Config declares bindings for unrecognized outcomes: %s. " +
+                "These don't match any RouteOutcome implementation found during startup scanning. " +
+                "Check for typos, or confirm the class exists within the scanned base package.",
+                processorName, unresolvedBindings);
             handleExtra(msg);
         }
 
         if (!crossCuttingBindings.isEmpty()) {
-            log.info("[{}] {} binding(s) resolved as cross-cutting Split/Multicast destination(s) "
-                    + "outside this processor's own sealed hierarchy: {}",
+            log.info("[{}] {} binding(s) resolved as cross-cutting Split/Multicast destination(s) " +
+                    "outside this processor's own sealed hierarchy: {}",
                     processorName, crossCuttingBindings.size(), crossCuttingBindings);
         }
 
@@ -110,19 +89,43 @@ public class BindingValidator {
     }
 
     /**
-     * Validates the structural shape of an optional {@code aggregate:} block. A
-     * no-op if none is declared. Always terminal on failure, regardless of
-     * ValidationMode — see class-level javadoc.
+     * Validates that no per-binding circuitBreaker override is declared on
+     * an outcome that isn't a permitted subtype of the processor's sealed
+     * hierarchy. Such an outcome is, by construction, only ever reachable
+     * via Multicast/Split's producerTemplate.send() path, which has no
+     * Camel DSL node for a circuit breaker to wrap.
      *
-     * <p>
-     * This only validates shape (required fields present, at least one
-     * completion condition set). It does NOT check whether strategyRef actually
-     * resolves to a registered AggregationStrategy — that resolution, and its
-     * own terminal failure on a missing strategy, happens later, during route
-     * compilation in GuanacoRouteBuilder, since it depends on what's been
-     * registered via {@code GuanacoContext.registerAggregationStrategy(...)}
-     * rather than on the config file alone.
+     * <p>This does NOT catch the residual, undecidable case: a sealed-
+     * hierarchy outcome that is ALSO emitted via Multicast/Split by
+     * developer code. In that case the circuit breaker silently won't
+     * apply on the Multicast/Split path — documented as a known limitation
+     * rather than silently ignored.
      */
+    public void validateCircuitBreakerScope(String processorName, RouteConfig routeConfig,
+                                             Class<? extends RouteOutcome<?>> routeInterface) {
+        Class<?>[] permitted = routeInterface.getPermittedSubclasses();
+        if (permitted == null) {
+            return; // whole route is non-sealed (Multicast/Split-only) — nothing to check per-outcome
+        }
+
+        Set<String> permittedNames = Arrays.stream(permitted)
+                .map(Class::getSimpleName).collect(Collectors.toSet());
+
+        for (Map.Entry<String, List<BindingTarget>> entry : routeConfig.getBindings().entrySet()) {
+            if (permittedNames.contains(entry.getKey())) continue; // reachable via choice() — fine
+
+            for (BindingTarget target : entry.getValue()) {
+                if (target.getCircuitBreaker() != null) {
+                    throw new InvalidRouteConfigurationException(
+                            "[" + processorName + "] binding '" + entry.getKey() + "' declares a circuitBreaker " +
+                            "override, but this outcome is not a permitted subtype of " + routeInterface.getName() +
+                            " — it can only be reached via Multicast/Split, which cannot be wrapped by a Camel " +
+                            "circuit breaker DSL node. Remove this override.");
+                }
+            }
+        }
+    }
+
     public void validateAggregateConfig(String processorName, RouteConfig routeConfig) {
         GuanacoAggregateConfig agg = routeConfig.getAggregate();
         if (agg == null) {
@@ -144,89 +147,14 @@ public class BindingValidator {
 
         if (!hasSize && !hasTimeout) {
             throw new InvalidRouteConfigurationException(
-                    "[" + processorName + "] aggregate block must declare at least one completion "
-                    + "condition greater than zero: completionSize or completionTimeoutMs.");
+                    "[" + processorName + "] aggregate block must declare at least one completion " +
+                    "condition greater than zero: completionSize or completionTimeoutMs.");
         }
 
         log.info("[{}] Aggregate config validated OK — correlationHeader='{}', strategyRef='{}'",
                 processorName, agg.getCorrelationHeader(), agg.getStrategyRef());
     }
 
-    /**
-     * Rejects any 'from' or binding endpoint URI whose scheme (the substring
-     * before the first ':') is a known scripting component scheme. Matched on
-     * scheme only, never via substring containment — deliberately so that a
-     * legitimate URI like "kafka:python:events-topic" (scheme = "kafka") is
-     * never mistakenly flagged.
-     */
-    private void validateNoForbiddenSchemes(String processorName, RouteConfig routeConfig) {
-        checkUri(processorName, "from", routeConfig.getFrom());
-
-        if (routeConfig.getBindings() != null) {
-            for (Map.Entry<String, List<String>> entry : routeConfig.getBindings().entrySet()) {
-                List<String> uris = entry.getValue();
-                if (uris == null) {
-                    continue;
-                }
-                for (String uri : uris) {
-                    checkUri(processorName, "bindings." + entry.getKey(), uri);
-                }
-            }
-        }
-    }
-
-    private void checkUri(String processorName, String fieldDescription, String uri) {
-        if (uri == null) {
-            return;
-        }
-
-        String scheme = extractScheme(uri);
-        if (scheme != null && FORBIDDEN_SCHEMES.contains(scheme)) {
-            String msg = String.format(
-                    "[%s] Forbidden scripting component scheme '%s' found in %s ('%s'). "
-                    + "Guanaco does not permit dynamic script interpretation at endpoints, to preserve "
-                    + "deterministic, compile-time-checked routing.",
-                    processorName, scheme, fieldDescription, uri);
-            log.error(msg);
-            throw new ForbiddenComponentException(msg);
-        }
-    }
-
-    private String extractScheme(String uri) {
-        int idx = uri.indexOf(':');
-        if (idx <= 0) {
-            return null;
-        }
-        return uri.substring(0, idx);
-    }
-
-    private void handleMissing(String message) {
-        switch (mode) {
-            case STRICT ->
-                throw new BindingValidationException(message);
-            case PERMISSIVE ->
-                log.warn("PERMISSIVE MODE - ignoring missing binding. {}", message);
-            case SILENT -> {
-            }
-        }
-    }
-
-    private void handleExtra(String message) {
-        switch (mode) {
-            case STRICT ->
-                throw new BindingValidationException(message);
-            case PERMISSIVE ->
-                log.warn("PERMISSIVE MODE — ignoring unresolved binding. {}", message);
-            case SILENT -> {
-            }
-        }
-    }
-
-    /**
-     * Validates the structural shape of an optional {@code idempotent:} block.
-     * A no-op if none is declared. Always terminal on failure, regardless of
-     * ValidationMode — same reasoning as {@link #validateAggregateConfig}.
-     */
     public void validateIdempotentConfig(String processorName, RouteConfig routeConfig) {
         GuanacoIdempotentConfig idempotent = routeConfig.getIdempotent();
         if (idempotent == null) {
@@ -247,12 +175,6 @@ public class BindingValidator {
                 processorName, idempotent.getMessageIdHeader(), idempotent.resolveCapacity());
     }
 
-    /**
-     * Validates the structural shape of an optional {@code resequence:} block.
-     * A no-op if none is declared. Always terminal on failure, regardless of
-     * ValidationMode — same reasoning as {@link #validateAggregateConfig} and
-     * {@link #validateIdempotentConfig}.
-     */
     public void validateResequenceConfig(String processorName, RouteConfig routeConfig) {
         GuanacoResequenceConfig reseq = routeConfig.getResequence();
         if (reseq == null) {
@@ -275,14 +197,14 @@ public class BindingValidator {
 
             if (!hasCapacity && !hasTimeout) {
                 throw new InvalidRouteConfigurationException(
-                        "[" + processorName + "] resequence in BATCH mode must declare at least one "
-                        + "completion condition greater than zero: capacity or timeoutMs.");
+                        "[" + processorName + "] resequence in BATCH mode must declare at least one " +
+                        "completion condition greater than zero: capacity or timeoutMs.");
             }
 
             if (reseq.getRejectOld() != null) {
                 throw new InvalidRouteConfigurationException(
-                        "[" + processorName + "] resequence.rejectOld is only valid in STREAM mode — "
-                        + "found alongside mode: BATCH. Remove it, or check for a typo in 'mode'.");
+                        "[" + processorName + "] resequence.rejectOld is only valid in STREAM mode — " +
+                        "found alongside mode: BATCH. Remove it, or check for a typo in 'mode'.");
             }
         } else {
             if (reseq.getCapacity() != null && reseq.getCapacity() <= 0) {
@@ -297,5 +219,56 @@ public class BindingValidator {
 
         log.info("[{}] Resequence config validated OK — sequenceHeader='{}', mode={}",
                 processorName, reseq.getSequenceHeader(), reseq.getMode());
+    }
+
+    private void validateNoForbiddenSchemes(String processorName, RouteConfig routeConfig) {
+        checkUri(processorName, "from", routeConfig.getFrom());
+
+        if (routeConfig.getBindings() != null) {
+            for (Map.Entry<String, List<BindingTarget>> entry : routeConfig.getBindings().entrySet()) {
+                List<BindingTarget> targets = entry.getValue();
+                if (targets == null) continue;
+                for (BindingTarget target : targets) {
+                    checkUri(processorName, "bindings." + entry.getKey(), target.getUri());
+                }
+            }
+        }
+    }
+
+    private void checkUri(String processorName, String fieldDescription, String uri) {
+        if (uri == null) return;
+
+        String scheme = extractScheme(uri);
+        if (scheme != null && FORBIDDEN_SCHEMES.contains(scheme)) {
+            String msg = String.format(
+                "[%s] Forbidden scripting component scheme '%s' found in %s ('%s'). " +
+                "Guanaco does not permit dynamic script interpretation at endpoints, to preserve " +
+                "deterministic, compile-time-checked routing.",
+                processorName, scheme, fieldDescription, uri);
+            log.error(msg);
+            throw new ForbiddenComponentException(msg);
+        }
+    }
+
+    private String extractScheme(String uri) {
+        int idx = uri.indexOf(':');
+        if (idx <= 0) return null;
+        return uri.substring(0, idx);
+    }
+
+    private void handleMissing(String message) {
+        switch (mode) {
+            case STRICT -> throw new BindingValidationException(message);
+            case PERMISSIVE -> log.warn("PERMISSIVE MODE - ignoring missing binding. {}", message);
+            case SILENT -> {}
+        }
+    }
+
+    private void handleExtra(String message) {
+        switch (mode) {
+            case STRICT -> throw new BindingValidationException(message);
+            case PERMISSIVE -> log.warn("PERMISSIVE MODE — ignoring unresolved binding. {}", message);
+            case SILENT -> {}
+        }
     }
 }

@@ -1,42 +1,24 @@
 package io.github.lilaschuda.guanaco.core;
 
+import io.github.lilaschuda.guanaco.config.BindingTarget;
 import io.github.lilaschuda.guanaco.config.RouteConfig;
 import io.github.lilaschuda.guanaco.dsl.Processor;
+import org.apache.camel.AggregationStrategy;
 import org.apache.camel.CamelContext;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import org.apache.camel.AggregationStrategy;
 
-/**
- * Shared JUnit 5 lifecycle and construction helpers for tests that exercise
- * GuanacoRouteBuilder directly, bypassing GuanacoContext's classpath scanning,
- * TopologyInspector, and BindingValidator. Intended for isolated tests of
- * routing/EIP behavior where the processor and RouteConfig are constructed by
- * hand rather than discovered from routes.yaml.
- *
- * Subclasses get a fresh, unstarted CamelContext per test via {@link #context},
- * automatically stopped after each test.
- */
 public abstract class GuanacoRouteBuilderTestSupport {
 
-    /**
-     * RouteOutcome.class as a raw Class object, widened to the wildcard-bounded
-     * type GuanacoRouteBuilder's constructor expects. Java's wildcard capture
-     * rules don't consider Class<RouteOutcome> and Class<? extends
-     * RouteOutcome<?>> directly assignment-compatible, even though the
-     * relationship trivially holds — this is the same friction documented
-     * elsewhere in this codebase around Class<? extends X<?>> boundaries. Use
-     * this constant for routes that never reach the choice() dispatch table
-     * (e.g. Drop/Multicast-only processors); for routes that do reach it (e.g.
-     * Split), pass a real sealed interface's Class instead.
-     */
     @SuppressWarnings("unchecked")
-    protected static final Class<? extends RouteOutcome<?>> ROUTE_OUTCOME_CLASS
-            = (Class<? extends RouteOutcome<?>>) (Class<?>) RouteOutcome.class;
+    protected static final Class<? extends RouteOutcome<?>> ROUTE_OUTCOME_CLASS =
+            (Class<? extends RouteOutcome<?>>) (Class<?>) RouteOutcome.class;
 
     protected CamelContext context;
 
@@ -50,10 +32,6 @@ public abstract class GuanacoRouteBuilderTestSupport {
         context.stop();
     }
 
-    /**
-     * Registers a GuanacoRouteBuilder route directly. Caller is responsible for
-     * calling context.start() afterward.
-     */
     protected void registerRoute(
             Processor<? extends RouteOutcome<?>> processor,
             Class<? extends RouteOutcome<?>> routeInterface,
@@ -63,10 +41,6 @@ public abstract class GuanacoRouteBuilderTestSupport {
         registerRoute(processor, routeInterface, config, processorName, registry, Map.of());
     }
 
-    /**
-     * Convenience overload for routes that never reach the choice() table
-     * (Drop/Multicast-only).
-     */
     protected void registerRoute(
             Processor<? extends RouteOutcome<?>> processor,
             Class<? extends RouteOutcome<?>> routeInterface,
@@ -87,24 +61,21 @@ public abstract class GuanacoRouteBuilderTestSupport {
     }
 
     /**
-     * Builds a RouteConfig with a single endpoint bound per outcome name, no
-     * error handler.
+     * Builds a RouteConfig with a single plain-URI (no circuit breaker)
+     * binding target per outcome name. Internally builds the
+     * Map&lt;String, List&lt;BindingTarget&gt;&gt; shape RouteConfig now
+     * requires, but keeps this method's own signature unchanged from before
+     * the v0.5.0 BindingTarget refactor — every existing test call site
+     * (Drop/Multicast/Split/Aggregate/Idempotent/Resequence) keeps working
+     * without modification.
      */
     protected RouteConfig routeConfig(String from, Map<String, String> singleBindings) {
         RouteConfig config = new RouteConfig();
         config.setFrom(from);
-
-        Map<String, Object> raw = new LinkedHashMap<>();
-        singleBindings.forEach(raw::put);
-        config.setBindings(raw);
-
+        config.setBindings(toBindingTargets(singleBindings));
         return config;
     }
 
-    /**
-     * Builds a RouteConfig with a single endpoint bound per outcome name, plus
-     * a dead letter.
-     */
     protected RouteConfig routeConfigWithDeadLetter(String from, Map<String, String> singleBindings, String deadLetter) {
         RouteConfig config = routeConfig(from, singleBindings);
 
@@ -113,5 +84,40 @@ public abstract class GuanacoRouteBuilderTestSupport {
         config.setErrorHandler(errorHandler);
 
         return config;
+    }
+
+    /**
+     * Like routeConfig(...), but allows attaching a circuit breaker
+     * override to one specific outcome's binding, for Circuit Breaker
+     * tests. All other outcomes get plain URI-only targets, same as
+     * routeConfig(...).
+     */
+    protected RouteConfig routeConfigWithCircuitBreaker(
+            String from, Map<String, String> singleBindings,
+            String circuitBreakerOutcomeName, io.github.lilaschuda.guanaco.config.GuanacoCircuitBreakerConfig cb) {
+
+        RouteConfig config = routeConfig(from, singleBindings);
+
+        List<BindingTarget> targets = config.getBindings().get(circuitBreakerOutcomeName);
+        if (targets == null || targets.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "routeConfigWithCircuitBreaker: '" + circuitBreakerOutcomeName +
+                    "' is not present in singleBindings — add it first.");
+        }
+        targets.get(0).setCircuitBreaker(cb);
+
+        return config;
+    }
+
+    private Map<String, List<BindingTarget>> toBindingTargets(Map<String, String> singleBindings) {
+        Map<String, List<BindingTarget>> result = new LinkedHashMap<>();
+        singleBindings.forEach((outcomeName, uri) -> {
+            BindingTarget target = new BindingTarget();
+            target.setUri(uri);
+            List<BindingTarget> list = new ArrayList<>();
+            list.add(target);
+            result.put(outcomeName, list);
+        });
+        return result;
     }
 }

@@ -5,6 +5,38 @@ All notable changes to Guanaco are documented here. Pre-1.0 versions are
 tagged release. Version numbers still advance one subversion per completed
 set of features, so the commit history stays easy to follow.
 
+## [0.5.0]
+
+### Added
+- **Hierarchical binding policy resolution.** `bindings` now accepts, per
+  outcome, either a plain URI string (short form, inherits route-level
+  defaults) or a rich object with `uri` and per-target policy overrides
+  (long form) — singly or as a list of either. Backed by `BindingTarget`
+  and a custom Jackson deserializer (`BindingsDeserializer`) normalizing
+  both shapes into `Map<String, List<BindingTarget>>`.
+- **Circuit Breaker EIP**, as the first policy supporting this hierarchy:
+  a route-level `circuitBreaker:` block sets the default for every binding
+  on that route; a binding-level `circuitBreaker:` override replaces it for
+  that one target; `enabled: false` on a binding opts out of an inherited
+  route-level policy entirely. Wired via `GuanacoResilienceHelper`, using
+  Camel's `CircuitBreakerDefinition`/`Resilience4jConfigurationDefinition`
+  plain-setter API rather than a long fluent chain — deliberately chosen
+  after several fluent-chain generics mismatches elsewhere in this project
+  made the setter-based approach the more reliable one to build against.
+- **Boot-time scope guardrail:** a per-binding `circuitBreaker` override on
+  an outcome that isn't a permitted subtype of the processor's sealed
+  hierarchy is rejected at startup — such an outcome is only ever reachable
+  via Multicast/Split's `producerTemplate.send()` path, which has no Camel
+  DSL node for a circuit breaker to wrap. Documented residual limitation:
+  a sealed-hierarchy outcome *also* emitted via Multicast/Split by
+  developer code will silently not get the circuit breaker on that path —
+  this specific case isn't statically decidable.
+
+### Scope
+- Throttler and Delayer are deferred to their own subsequent versions,
+  reusing this same route-level-default / binding-level-override pattern
+  now that it's implemented and tested against a real EIP.
+
 ## [0.4.0]
 
 ### Added

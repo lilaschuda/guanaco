@@ -1,5 +1,6 @@
 package io.github.lilaschuda.guanaco.core;
 
+import io.github.lilaschuda.guanaco.config.BindingTarget;
 import io.github.lilaschuda.guanaco.config.GuanacoAggregateConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoConfig.ValidationMode;
 import io.github.lilaschuda.guanaco.config.GuanacoResequenceConfig;
@@ -105,7 +106,10 @@ class BindingValidatorGuardrailTest {
 
     @Test
     void forbiddenSchemeInBinding_throwsForbiddenComponentException() {
-        RouteConfig config = testRoute("direct:orders", Map.of("ToAudit", "js:some-script.js"));
+        BindingTarget bt = new BindingTarget();
+        bt.setUri("js:some-script.js");
+        List<BindingTarget> btl = List.of(bt);
+        RouteConfig config = testRoute("direct:orders", Map.of("ToAudit", btl));
 
         assertThatThrownBy(() -> validator.validate("Test", java.util.Set.of("ToAudit"), config, emptyRegistry()))
                 .isInstanceOf(ForbiddenComponentException.class)
@@ -117,17 +121,20 @@ class BindingValidatorGuardrailTest {
         // "python" appears mid-URI here, not as the scheme — must NOT trip
         // the guardrail. This is the exact false-positive case a substring
         // .contains() check would have wrongly flagged.
-        RouteConfig config = testRoute("kafka:python:events", Map.of("ToInventory", "mock:inventory"));
+        BindingTarget bt = new BindingTarget();
+        bt.setUri("mock:inventory");
+        List<BindingTarget> btl = List.of(bt);
+        RouteConfig config = testRoute("kafka:python:events", Map.of("ToInventory", btl));
 
         assertThatCode(() -> validator.validate("Test", java.util.Set.of("ToInventory"), config, emptyRegistry()))
                 .doesNotThrowAnyException();
     }
 
-    private RouteConfig testRoute(String from, Map<String, String> singleBindings) {
+    private RouteConfig testRoute(String from, Map<String, List<BindingTarget>> singleBindings) {
         RouteConfig config = new RouteConfig();
         config.setFrom(from);
 
-        Map<String, Object> raw = new LinkedHashMap<>();
+        Map<String, List<BindingTarget>> raw = new LinkedHashMap<>();
         singleBindings.forEach(raw::put);
         config.setBindings(raw);
 

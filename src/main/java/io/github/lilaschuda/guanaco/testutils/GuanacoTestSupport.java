@@ -1,10 +1,12 @@
 package io.github.lilaschuda.guanaco.testutils;
 
+import io.github.lilaschuda.guanaco.config.BindingTarget;
 import io.github.lilaschuda.guanaco.config.GuanacoConfig.ValidationMode;
 import io.github.lilaschuda.guanaco.config.RouteConfig;
 import io.github.lilaschuda.guanaco.core.GuanacoContext;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -30,11 +32,11 @@ public final class GuanacoTestSupport {
     }
 
     /** Fluently defines a route configuration for a given processor by hand, bypassing routes.yaml. */
-    public GuanacoTestSupport route(String processorName, String fromUri, Map<String, String> bindings) {
+    public GuanacoTestSupport route(String processorName, String fromUri, Map<String, List<BindingTarget>> bindings) {
         RouteConfig routeConfig = new RouteConfig();
         routeConfig.setFrom(fromUri);
         
-        Map<String, Object> rawBindings = new HashMap<>();
+        Map<String, List<BindingTarget>> rawBindings = new HashMap<>();
         bindings.forEach(rawBindings::put);
         routeConfig.setBindings(rawBindings);
         
