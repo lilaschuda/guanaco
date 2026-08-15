@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Normalizes the 'bindings' block into Map&lt;String, List&lt;BindingTarget&gt;&gt;.
+ * Normalizes the 'bindings' block into Map<String, List<BindingTarget>>.
  * Each outcome key accepts, singly or as a list: a plain URI string, or a
  * rich object with 'uri' and an optional 'circuitBreaker'.
  */

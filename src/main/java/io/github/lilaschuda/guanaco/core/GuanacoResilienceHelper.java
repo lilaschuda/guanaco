@@ -1,9 +1,11 @@
 package io.github.lilaschuda.guanaco.core;
 
 import io.github.lilaschuda.guanaco.config.GuanacoCircuitBreakerConfig;
+import io.github.lilaschuda.guanaco.config.GuanacoThrottlerConfig;
 import org.apache.camel.model.CircuitBreakerDefinition;
 import org.apache.camel.model.ProcessorDefinition;
 import org.apache.camel.model.Resilience4jConfigurationDefinition;
+import org.apache.camel.model.ThrottleDefinition;
 
 public class GuanacoResilienceHelper {
 
@@ -32,4 +34,5 @@ public class GuanacoResilienceHelper {
         cb.setResilience4jConfiguration(r4j);
         cb.to(targetUri);
     }
+
 }

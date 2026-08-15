@@ -3,7 +3,7 @@ package io.github.lilaschuda.guanaco.config;
 import java.util.Map;
 
 /**
- * Top-level POJO for the full routes.yaml file.
+ * Top-level POJO for the full routes.json or routes.yaml file.
  *
  * routes.yaml structure:
  *

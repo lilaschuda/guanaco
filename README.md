@@ -108,6 +108,140 @@ The merge strategy is a plain, compiled `org.apache.camel.AggregationStrategy` r
 
 **Logging** has no framework-provided DSL either — there's nothing to provide, since a processor is a plain Java method body. Use SLF4J (or your logger of choice) directly inside your processor, exactly as you would in any other Java class.
 
+## Message-stream EIPs: Idempotent Consumer, Resequencer, Aggregate
+
+Unlike Drop/Multicast/Split, these three don't operate on a processor's return value — they run *before* a processor is ever invoked, filtering or reordering the incoming message stream itself. Each is declared as a config block on `RouteConfig`, and all three share one fixed, non-configurable pipeline order when combined on a single route: **Idempotent Consumer → Resequence → Aggregate**. Idempotent runs first so a cheap duplicate is dropped before any buffer memory is allocated for sequencing or correlation; Resequence runs before Aggregate so an order-sensitive `AggregationStrategy` always receives messages in strict sequence.
+
+### Idempotent Consumer
+
+```yaml
+routes:
+  OrderProcessor:
+    from: kafka:orders
+    idempotent:
+      messageIdHeader: orderId
+      capacity: 10000       # optional, default 10000
+      eager: true            # optional, default true
+      removeOnFailure: true  # optional, default true
+      skipDuplicate: true    # optional, default true
+```
+
+Duplicate messages (by `messageIdHeader`) are filtered before ever reaching the processor. In-memory only (`MemoryIdempotentRepository`) — no pluggable repository backend yet. A filtered duplicate is always logged at `DEBUG`, regardless of Camel's own internal logging configuration, via a small `LoggingIdempotentRepository` wrapper.
+
+### Resequencer
+
+```yaml
+routes:
+  OrderProcessor:
+    from: kafka:orders
+    resequence:
+      sequenceHeader: sequenceNumber
+      mode: STREAM              # or BATCH
+      capacity: 1000            # STREAM: window size. BATCH: max batch size
+      timeoutMs: 2000           # STREAM: max wait for an out-of-order gap. BATCH: max wait before closing an incomplete batch
+      rejectOld: true           # STREAM only, default true — reject a message older than the last released one
+```
+
+**STREAM** mode releases as soon as ordering allows, within a sliding window. **BATCH** mode collects a full batch, sorts it completely, then releases it as one sorted unit — higher latency, fully correct total ordering within the batch. BATCH mode requires at least one of `capacity`/`timeoutMs` to close the batch; `rejectOld` is STREAM-only and rejected at boot if set alongside `mode: BATCH`, since its presence there almost always signals a typo.
+
+### Aggregate
+
+```yaml
+routes:
+  OrderProcessor:
+    from: kafka:orders
+    aggregate:
+      correlationHeader: orderId
+      strategyRef: orderMergeStrategy
+      completionSize: 10
+      completionTimeoutMs: 5000
+```
+
+```java
+guanacoContext.registerAggregationStrategy("orderMergeStrategy", new OrderMergeStrategy());
+```
+
+Correlates and merges multiple incoming messages into one before your processor ever runs. The merge strategy is a plain, compiled `org.apache.camel.AggregationStrategy` registered by name — no Spring bean lookup, no reflection. `correlationHeader`/`sequenceHeader`/`messageIdHeader` are all resolved the same way across these three EIPs: Camel's type-safe `header(name)` builder, never an interpreted expression string.
+
+## Resiliency policies: Circuit Breaker and Throttler
+
+Circuit Breaker and Throttler share a single hierarchical configuration model: declare a policy at the route level as the default for every binding, and optionally override it per binding for a specific target. A binding can also opt out of an inherited route-level policy entirely with `enabled: false`.
+
+```yaml
+routes:
+  OrderDispatchRoute:
+    from: kafka:orders
+    throttler:                        # route-level default — applies to every binding below
+      requestsPerPeriod: 1000
+      timePeriodMillis: 1000
+    circuitBreaker:
+      failureRateThreshold: 50
+      slidingWindowSize: 20
+    bindings:
+      ToAudit: "jms:queue:audit"       # inherits both route defaults as-is
+      ToPartner:
+        uri: "https://api.partner.com/v1/orders"
+        throttler:                     # overrides the route default for this binding only
+          requestsPerPeriod: 50
+          timePeriodMillis: 1000
+        circuitBreaker:
+          enabled: false               # opts this binding out of the inherited circuit breaker
+```
+
+When both apply to the same binding, **Throttle always wraps outermost, Circuit Breaker innermost** — admission control (should this call even be attempted right now) happens before failure detection (did the attempted call succeed). This ordering is fixed and not configurable.
+
+### Throttler
+
+```yaml
+throttler:
+  requestsPerPeriod: 1000
+  timePeriodMillis: 1000
+  asyncDelayed: false     # optional, default false
+  rejectExecution: false  # optional, default false
+```
+
+`asyncDelayed` and `rejectExecution` are mutually exclusive — "never wait" and "wait without blocking" are contradictory, and setting both is rejected at boot. Leave both unset for Camel's default blocking queue-and-wait behavior. A message rejected via `rejectExecution: true` propagates through the route's normal error handling (`errorHandler.deadLetter`, if configured), the same as any other exception — no separate failure-handling mechanism needed.
+
+### Circuit Breaker
+
+```yaml
+circuitBreaker:
+  failureRateThreshold: 50
+  slidingWindowSize: 20
+  minimumNumberOfCalls: 10
+  timeoutDurationMs: 5000
+```
+
+Backed by Camel's Resilience4j integration, configured via plain setters on `Resilience4jConfigurationDefinition` rather than a long fluent DSL chain — a deliberate choice after several fluent-chain generics mismatches elsewhere in this codebase made the setter-based approach the more reliable one to build against.
+
+### Scope: both policies only apply to `choice()`-dispatched bindings
+
+Circuit Breaker and Throttler are both wired as Camel DSL nodes wrapping a `.to(...)` call. `Multicast` and `Split` dispatch via an imperative `producerTemplate.send()` call instead — specifically so their destinations can be resolved dynamically by simple class name against the closed-world registry — and there's no DSL node there for either policy to wrap. A per-binding `circuitBreaker` or `throttler` override on an outcome that isn't a permitted subtype of the processor's own sealed hierarchy is rejected at boot, since such an outcome is only ever reachable via Multicast/Split.
+
+One residual case isn't statically decidable and isn't caught: an outcome that *is* a permitted sealed-hierarchy member, but that developer code *also* happens to emit via `Multicast`/`Split`. In that specific case, the policy silently won't apply on the Multicast/Split path. This is a known, documented limitation rather than a silent gap.
+
+### Testing routes with resiliency policies
+
+`GuanacoTestSupport` (in `io.github.lilaschuda.guanaco.testutils`) lets you build and start routes programmatically for tests, without a physical `routes.yaml`/`routes.json`:
+
+```java
+GuanacoRuntimeEnvironment env = new GuanacoTestSupport("com.example.myapp")
+    .withRouteThrottler(routeThrottler)          // optional route-level default
+    .route("OrderProcessor", "direct:orders", Map.of(
+        "ToAudit",   List.of(auditTarget),
+        "ToPartner", List.of(partnerTarget)))
+    .start();
+
+MockEndpoint audit = env.getMock("mock:audit");
+audit.expectedMessageCount(1);
+env.send("direct:orders", "message");
+MockEndpoint.assertIsSatisfied(audit);
+
+env.shutdown();
+```
+
+Note that `BindingValidator`'s `STRICT` mode (the default) still requires every outcome in a processor's sealed hierarchy to have a binding, even in tests — a test exercising only one branch of a multi-outcome processor still needs to supply bindings for the others.
+
 ## Closed-world dispatch
 
 Every concrete `RouteOutcome` implementation in your base package is scanned exactly once at boot, into a frozen registry. `Split` and `Multicast` destinations are checked against this registry before dispatch, independent of whether they have a YAML binding — an outcome instance whose class was never part of that boot-time scan (wrong package, a construction mistake) is rejected and logged, rather than silently dispatched or silently dropped. No reflection, classpath scanning, or dynamic class loading happens anywhere in the per-message dispatch path; the registry is built once, at startup, and never touched again.
@@ -127,7 +261,7 @@ Guanaco auto-detects YAML or JSON purely by file extension — there's no separa
 
 ## Status
 
-Guanaco is v0.2, pre-1.0. The core pipeline — scanning `@GuanacoRoute` processors, inspecting sealed-interface topology, validating bindings, and generating Camel routes — works end to end, along with Drop, Multicast, Split, and Aggregate. APIs are not yet stable and may change before v1.0.
+Guanaco is v0.6, pre-1.0. The core pipeline — scanning `@GuanacoRoute` processors, inspecting sealed-interface topology, validating bindings, and generating Camel routes — works end to end, along with Drop, Multicast, Split, Idempotent Consumer, Resequencer, Aggregate, Circuit Breaker, and Throttler. APIs are not yet stable and may change before v1.0.
 
 ## A note on the Spring dependency
 
@@ -139,7 +273,7 @@ Guanaco depends on `camel-spring-xml` and `spring-context` to support loading le
 <dependency>
     <groupId>io.github.lilaschuda</groupId>
     <artifactId>guanaco</artifactId>
-    <version>0.2.0-SNAPSHOT</version>
+    <version>0.6.0-SNAPSHOT</version>
 </dependency>
 ```
 

@@ -5,6 +5,50 @@ All notable changes to Guanaco are documented here. Pre-1.0 versions are
 tagged release. Version numbers still advance one subversion per completed
 set of features, so the commit history stays easy to follow.
 
+## [0.6.0]
+
+### Added
+- **Throttler EIP**, reusing the route-default/binding-override hierarchy
+  introduced for Circuit Breaker in v0.5.0. Supports `requestsPerPeriod`,
+  `timePeriodMillis`, `asyncDelayed`, and `rejectExecution` —
+  `asyncDelayed` and `rejectExecution` are rejected at boot if both are
+  true, since "never wait" and "wait without blocking" are contradictory.
+  A message rejected via `rejectExecution: true` propagates through the
+  route's normal error handling, the same as any other exception.
+- **Fixed, non-configurable ordering** when both Throttler and Circuit
+  Breaker apply to the same binding: Throttle always wraps outermost
+  (admission control before an attempt), Circuit Breaker innermost
+  (failure detection on the attempt itself).
+- **`GuanacoContext.loadConfig()`** extracted as a small, protected,
+  overridable hook around what was previously an inline `configLoader.load()`
+  call inside `wireRoutes()` — lets test support code inject route
+  configurations built programmatically, bypassing a physical config file
+  entirely, without touching any other part of `wireRoutes()`'s pipeline.
+- **`GuanacoTestSupport` / `GuanacoRuntimeEnvironment`**, a public test
+  utility for applications building on Guanaco: builds and starts routes
+  programmatically (`.route(...)`, `.withRouteThrottler(...)`,
+  `.withRouteCircuitBreaker(...)`, `.withValidation(...)`), and provides
+  simplified mock-endpoint and message-sending helpers for assertions.
+
+### Changed
+- `validateCircuitBreakerScope` generalized into `validateDslOnlyPolicyScope`,
+  covering both `circuitBreaker` and `throttler` in one shared check rather
+  than near-duplicate methods that could drift out of sync — rejects at
+  boot any per-binding override declared on an outcome that isn't a
+  permitted subtype of the processor's sealed hierarchy, since such an
+  outcome is only ever reachable via Multicast/Split's imperative dispatch.
+
+### Fixed
+- An `enabled: false` per-binding policy override no longer fails
+  structural completeness validation — its other fields
+  (`requestsPerPeriod`, `timePeriodMillis`, etc.) are meaningless once the
+  policy is disabled, so they're no longer required to be populated.
+- `GuanacoTestSupport` was missing the `ApplicationContext` setup
+  `GuanacoContext` (as a `SpringCamelContext` subclass) requires before
+  `start()` — every test using it would fail with a `NullPointerException`
+  from Spring's internals. Now sets a `StaticApplicationContext`, matching
+  the convention already established in `GuanacoContextTest`.
+
 ## [0.5.0]
 
 ### Added

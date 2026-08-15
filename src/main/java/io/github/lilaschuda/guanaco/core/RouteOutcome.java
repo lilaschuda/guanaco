@@ -16,7 +16,7 @@ package io.github.lilaschuda.guanaco.core;
  *   record ToInventory(String body) implements OrderRoute<String> {}
  *
  * Framework-recognized special outcomes (Drop, Multicast) are detected
- * via instanceof in GuanacoRouteBuilder — no YAML binding required for them.
+ * via instanceof in GuanacoRouteBuilder — no JSON or YAML binding required for them.
  */
 public interface RouteOutcome<T> {
     T body();

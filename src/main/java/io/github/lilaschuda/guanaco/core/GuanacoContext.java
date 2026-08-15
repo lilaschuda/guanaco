@@ -20,6 +20,7 @@ import org.apache.camel.spi.Resource;
 import org.apache.camel.spring.SpringCamelContext;
 import org.apache.camel.support.PluginHelper;
 import org.apache.camel.support.ResourceHelper;
+import org.springframework.context.ApplicationContext;
 
 /**
  * Main entry point for camel-guanaco.
@@ -52,6 +53,14 @@ public class GuanacoContext extends SpringCamelContext {
         this.basePackage = basePackage;
         this.configLoader = new ConfigLoader();
         this.inspector = new TopologyInspector();
+    }
+    
+    //Overload with custom ApplicationContext for tests support
+    public GuanacoContext(String basePackage, ApplicationContext applicationContext){
+        this.basePackage = basePackage;
+        this.configLoader = new ConfigLoader();
+        this.inspector = new TopologyInspector();
+        this.setApplicationContext(applicationContext);
     }
 
     /**
@@ -87,15 +96,25 @@ public class GuanacoContext extends SpringCamelContext {
     }
 
     /**
+     * Supplies the route configurations wireRoutes() operates on. Defaults to
+     * loading from routes.yaml/json via ConfigLoader. Overridable so test
+     * support code (see GuanacoTestSupport) can inject route configs built
+     * programmatically, bypassing a physical config file entirely.
+     */
+    protected GuanacoConfig loadConfig() {
+        return configLoader.load();
+    }
+
+    /**
      * Scans for @GuanacoRoute processors, validates their topology against
      * routes.yaml, and registers the generated routes with this context.
      *
      * Call this BEFORE start().
      */
     public void wireRoutes() throws Exception {
-        log.info("=== camel-guanaco v0.2 wiring routes ===");
+        log.info("=== camel-guanaco wiring routes ===");
 
-        GuanacoConfig config = configLoader.load();
+        GuanacoConfig config = loadConfig();
         BindingValidator validator = new BindingValidator(config.getFramework().getValidation());
         Map<String, RouteConfig> routeConfigs = config.getRoutes();
 
@@ -141,6 +160,8 @@ public class GuanacoContext extends SpringCamelContext {
             validator.validateAggregateConfig(name, routeConfig);
             validator.validateIdempotentConfig(name, routeConfig);
             validator.validateResequenceConfig(name, routeConfig);
+            validator.validateThrottlerConfig(name, routeConfig);
+            validator.validateDslOnlyPolicyScope(name, routeConfig, routeInterface);
 
             Processor<RouteOutcome<?>> instance
                     = (Processor<RouteOutcome<?>>) processorClass.getDeclaredConstructor().newInstance();

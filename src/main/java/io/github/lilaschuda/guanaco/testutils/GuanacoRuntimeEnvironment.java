@@ -1,6 +1,6 @@
 package io.github.lilaschuda.guanaco.testutils;
 
-import org.apache.camel.CamelContext;
+import io.github.lilaschuda.guanaco.core.GuanacoContext;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.component.mock.MockEndpoint;
 
@@ -13,10 +13,10 @@ import java.util.Map;
  */
 public final class GuanacoRuntimeEnvironment {
     
-    private final CamelContext context;
+    private GuanacoContext context;
     private final ProducerTemplate producer;
 
-    public GuanacoRuntimeEnvironment(CamelContext context) {
+    public GuanacoRuntimeEnvironment(GuanacoContext context) {
         this.context = context;
         this.producer = context.createProducerTemplate();
     }
@@ -41,6 +41,13 @@ public final class GuanacoRuntimeEnvironment {
         producer.sendBodyAndHeaders(endpointUri, body, camelHeaders);
     }
 
+    public void setApplicationContext(GuanacoContext context){
+        this.context = context;
+    }
+    
+    public GuanacoContext getApplicationContext(){
+        return this.context;
+    }
     /** Gracefully tears down the testing context and messaging producers. */
     public void shutdown() {
         try {

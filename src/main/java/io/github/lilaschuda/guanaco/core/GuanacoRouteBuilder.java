@@ -5,6 +5,7 @@ import io.github.lilaschuda.guanaco.config.GuanacoAggregateConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoCircuitBreakerConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoIdempotentConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoResequenceConfig;
+import io.github.lilaschuda.guanaco.config.GuanacoThrottlerConfig;
 import io.github.lilaschuda.guanaco.config.RouteConfig;
 import io.github.lilaschuda.guanaco.dsl.Processor;
 import io.github.lilaschuda.guanaco.eip.Drop;
@@ -26,6 +27,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
+import org.apache.camel.model.ThrottleDefinition;
 import org.apache.camel.support.processor.idempotent.MemoryIdempotentRepository;
 
 public class GuanacoRouteBuilder extends RouteBuilder {
@@ -405,18 +407,37 @@ public class GuanacoRouteBuilder extends RouteBuilder {
     private void addBranch(ChoiceDefinition choice, Class<?> outcomeClass, String outcomeName, List<BindingTarget> targets) {
         if (targets.size() == 1) {
             BindingTarget target = targets.get(0);
+            GuanacoThrottlerConfig throttler = config.resolveThrottlerFor(target);
             GuanacoCircuitBreakerConfig cb = config.resolveCircuitBreakerFor(target);
+
+            ChoiceDefinition branch = choice.when(exchange -> outcomeClass.isInstance(exchange.getProperty(OUTCOME_PROPERTY)));
+
+            ProcessorDefinition<?> parent = branch;
+
+            if (throttler != null) {
+                log.info("[{}] Bound {} → {} (throttled: {} req / {}ms)",
+                        processorName, outcomeName, target.getUri(),
+                        throttler.getRequestsPerPeriod(), throttler.getTimePeriodMillis());
+                parent = applyThrottle(parent, throttler);
+            }
 
             if (cb != null) {
                 log.info("[{}] Bound {} → {} (circuit breaker enabled)", processorName, outcomeName, target.getUri());
-                ChoiceDefinition branch = choice.when(exchange -> outcomeClass.isInstance(exchange.getProperty(OUTCOME_PROPERTY)));
-                GuanacoResilienceHelper.applyCircuitBreaker(branch, target.getUri(), cb);
+                GuanacoResilienceHelper.applyCircuitBreaker(parent, target.getUri(), cb);
+            } else if (throttler != null) {
+                // Throttle applied but no circuit breaker — the throttle
+                // definition itself needs a plain .to(uri) child.
+                ((ThrottleDefinition) parent).to(target.getUri());
             } else {
+                // Neither policy applies — plain, unwrapped dispatch.
+                // FIX: was incorrectly calling branch.when(...) a second time
+                // here; should just be a plain .to() on the branch itself.
                 log.info("[{}] Bound {} → {}", processorName, outcomeName, target.getUri());
-                choice.when(exchange -> outcomeClass.isInstance(exchange.getProperty(OUTCOME_PROPERTY)))
-                        .to(target.getUri());
+                branch.to(target.getUri());
             }
         } else {
+            // Multicast case — multiple static endpoints for one outcome.
+            // Unrelated to the throttler/circuit-breaker logic above; unchanged.
             List<String> uris = targets.stream().map(BindingTarget::getUri).toList();
             choice.when(exchange -> outcomeClass.isInstance(exchange.getProperty(OUTCOME_PROPERTY)))
                     .multicast()
@@ -444,5 +465,28 @@ public class GuanacoRouteBuilder extends RouteBuilder {
         log.warn("[{}] Bindings config binds '{}' but no permitted subtype of {} matches that name — " +
                 "check for a typo.", processorName, outcomeName, routeInterface.getName());
         return null;
+    }
+    
+    /**
+     * Applies a throttle policy and returns the ThrottleDefinition itself,
+     * WITHOUT attaching a .to(uri) call — the caller decides what nests inside
+     * it. Kept local to GuanacoRouteBuilder (rather than
+     * GuanacoResilienceHelper, alongside applyCircuitBreaker) specifically
+     * because it needs constant(...), which is inherited from RouteBuilder
+     * itself and not cleanly accessible from a standalone helper class.
+     */
+    private ThrottleDefinition applyThrottle(ProcessorDefinition<?> parent, GuanacoThrottlerConfig throttlerConfig) {
+        ThrottleDefinition throttle = parent.throttle(constant(throttlerConfig.getRequestsPerPeriod()));
+
+        throttle.setTimePeriodMillis(Long.toString(throttlerConfig.getTimePeriodMillis()));
+
+        if (throttlerConfig.resolveAsyncDelayed()) {
+            throttle.setAsyncDelayed("true");
+        }
+        if (throttlerConfig.resolveRejectExecution()) {
+            throttle.setRejectExecution("true");
+        }
+
+        return throttle;
     }
 }

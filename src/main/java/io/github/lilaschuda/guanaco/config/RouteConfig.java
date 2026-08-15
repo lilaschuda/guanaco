@@ -20,6 +20,7 @@ public class RouteConfig {
 
     /** Route-level default circuit breaker policy — inherited by every binding unless overridden. */
     private GuanacoCircuitBreakerConfig circuitBreaker;
+    private GuanacoThrottlerConfig throttler;
 
     public String getFrom() { return from; }
     public void setFrom(String from) { this.from = from; }
@@ -42,6 +43,9 @@ public class RouteConfig {
     public GuanacoCircuitBreakerConfig getCircuitBreaker() { return circuitBreaker; }
     public void setCircuitBreaker(GuanacoCircuitBreakerConfig circuitBreaker) { this.circuitBreaker = circuitBreaker; }
 
+    public GuanacoThrottlerConfig getThrottler() { return throttler; }
+    public void setThrottler(GuanacoThrottlerConfig throttler) { this.throttler = throttler; }
+
     /** Just the URIs for a given outcome — what dispatch code (Multicast/Split/fanOut) actually needs. */
     public List<String> getUrisFor(String outcomeName) {
         List<BindingTarget> targets = bindings.get(outcomeName);
@@ -59,6 +63,13 @@ public class RouteConfig {
             return target.getCircuitBreaker().resolveEnabled() ? target.getCircuitBreaker() : null;
         }
         return circuitBreaker;
+    }
+
+    public GuanacoThrottlerConfig resolveThrottlerFor(BindingTarget target) {
+        if (target.getThrottler() != null) {
+            return target.getThrottler().resolveEnabled() ? target.getThrottler() : null;
+        }
+        return throttler;
     }
 
     public static class ErrorHandlerConfig {

@@ -1,61 +1,84 @@
 package io.github.lilaschuda.guanaco.testutils;
 
 import io.github.lilaschuda.guanaco.config.BindingTarget;
+import io.github.lilaschuda.guanaco.config.GuanacoCircuitBreakerConfig;
+import io.github.lilaschuda.guanaco.config.GuanacoConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoConfig.ValidationMode;
+import io.github.lilaschuda.guanaco.config.GuanacoThrottlerConfig;
 import io.github.lilaschuda.guanaco.config.RouteConfig;
 import io.github.lilaschuda.guanaco.core.GuanacoContext;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.support.StaticApplicationContext;
 
-/**
- * Public test support utility for applications building on camel-guanaco.
- * Provides a fluent builder to spin up localized contexts, wire routes,
- * and assert outcomes with minimal boilerplate.
- */
 public final class GuanacoTestSupport {
 
     private final String basePackage;
     private final Map<String, RouteConfig> virtualRoutes = new HashMap<>();
     private ValidationMode validationMode = ValidationMode.STRICT;
+    private GuanacoThrottlerConfig routeThrottler;
+    private GuanacoCircuitBreakerConfig routeCircuitBreaker;
     private GuanacoContext context;
 
     public GuanacoTestSupport(String basePackage) {
         this.basePackage = basePackage;
     }
 
-    /** Overrides the global framework validation severity for this test environment. */
     public GuanacoTestSupport withValidation(ValidationMode mode) {
         this.validationMode = mode;
         return this;
     }
 
-    /** Fluently defines a route configuration for a given processor by hand, bypassing routes.yaml. */
-    public GuanacoTestSupport route(String processorName, String fromUri, Map<String, List<BindingTarget>> bindings) {
-        RouteConfig routeConfig = new RouteConfig();
-        routeConfig.setFrom(fromUri);
-        
-        Map<String, List<BindingTarget>> rawBindings = new HashMap<>();
-        bindings.forEach(rawBindings::put);
-        routeConfig.setBindings(rawBindings);
-        
-        virtualRoutes.put(processorName, routeConfig);
+    /** Route-level throttler default — applied to the next .route(...) call, then cleared. */
+    public GuanacoTestSupport withRouteThrottler(GuanacoThrottlerConfig throttler) {
+        this.routeThrottler = throttler;
         return this;
     }
 
-    /** Initializes the context, runs Topology Inspection, validates bindings, and starts the routes. */
+    /** Route-level circuit breaker default — applied to the next .route(...) call, then cleared. */
+    public GuanacoTestSupport withRouteCircuitBreaker(GuanacoCircuitBreakerConfig cb) {
+        this.routeCircuitBreaker = cb;
+        return this;
+    }
+
+    public GuanacoTestSupport route(String processorName, String fromUri, Map<String, List<BindingTarget>> bindings) {
+        RouteConfig routeConfig = new RouteConfig();
+        routeConfig.setFrom(fromUri);
+        routeConfig.setThrottler(routeThrottler);
+        routeConfig.setCircuitBreaker(routeCircuitBreaker);
+
+        Map<String, List<BindingTarget>> rawBindings = new HashMap<>();
+        bindings.forEach(rawBindings::put);
+        routeConfig.setBindings(rawBindings);
+
+        virtualRoutes.put(processorName, routeConfig);
+
+        // Cleared after use so a second .route(...) call in the same test
+        // doesn't silently inherit the previous route's policy defaults.
+        this.routeThrottler = null;
+        this.routeCircuitBreaker = null;
+
+        return this;
+    }
+
     public GuanacoRuntimeEnvironment start() throws Exception {
-        // Subclass or initialize GuanacoContext using our virtual route configurations
         this.context = new GuanacoContext(basePackage) {
             @Override
-            public void wireRoutes() throws Exception {
-                // Here we can inject our virtualRoutes map directly into the loader 
-                // to skip loading a physical routes.yaml if the user wants programmatic test profiles.
-                super.wireRoutes();
+            protected GuanacoConfig loadConfig() {
+                GuanacoConfig config = new GuanacoConfig();
+                GuanacoConfig.FrameworkConfig framework = new GuanacoConfig.FrameworkConfig();
+                framework.setValidation(validationMode);
+                config.setFramework(framework);
+                config.setRoutes(virtualRoutes);
+                return config;
             }
         };
-
+        ApplicationContext ctx = new StaticApplicationContext();
+        context.setApplicationContext(ctx);
+        context.wireRoutes();
         context.start();
         return new GuanacoRuntimeEnvironment(context);
     }
