@@ -4,9 +4,12 @@ import io.github.lilaschuda.guanaco.config.BindingTarget;
 import io.github.lilaschuda.guanaco.config.GuanacoCircuitBreakerConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoConfig.ValidationMode;
+import io.github.lilaschuda.guanaco.config.GuanacoDelayerConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoThrottlerConfig;
 import io.github.lilaschuda.guanaco.config.RouteConfig;
 import io.github.lilaschuda.guanaco.core.GuanacoContext;
+import io.github.lilaschuda.guanaco.core.GuanacoDelayStrategy;
+import io.github.lilaschuda.guanaco.core.GuanacoRouteBuilderException;
 
 import java.util.HashMap;
 import java.util.List;
@@ -22,6 +25,9 @@ public final class GuanacoTestSupport {
     private GuanacoThrottlerConfig routeThrottler;
     private GuanacoCircuitBreakerConfig routeCircuitBreaker;
     private GuanacoContext context;
+
+    private final Map<String, GuanacoDelayStrategy> delayStrategies = new HashMap<>();
+    private GuanacoDelayerConfig routeDelayer;
 
     public GuanacoTestSupport(String basePackage) {
         this.basePackage = basePackage;
@@ -78,8 +84,34 @@ public final class GuanacoTestSupport {
         };
         ApplicationContext ctx = new StaticApplicationContext();
         context.setApplicationContext(ctx);
+        delayStrategies.forEach((k,v) -> {
+            context.getDelayStrategies().put(k, v);
+        });
         context.wireRoutes();
         context.start();
         return new GuanacoRuntimeEnvironment(context);
+    }
+    
+    public GuanacoTestSupport registerDelayStrategy(String name, GuanacoDelayStrategy strategy) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("GuanacoDelayStrategy name must be provided and non-blank.");
+        }
+        if (strategy == null) {
+            throw new IllegalArgumentException("GuanacoDelayStrategy instance must not be null.");
+        }
+
+        GuanacoDelayStrategy previous = delayStrategies.putIfAbsent(name, strategy);
+        if (previous != null) {
+            throw new IllegalArgumentException(
+                    "A GuanacoDelayStrategy is already registered under name '" + name + "'. "
+                    + "Registration is explicit and must be unique — choose a different name.");
+        }
+        
+        return this;
+    }
+
+    public GuanacoTestSupport withRouteDelayer(GuanacoDelayerConfig delayer) {
+        this.routeDelayer = delayer;
+        return this;
     }
 }

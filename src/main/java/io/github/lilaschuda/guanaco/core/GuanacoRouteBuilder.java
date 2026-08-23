@@ -3,6 +3,7 @@ package io.github.lilaschuda.guanaco.core;
 import io.github.lilaschuda.guanaco.config.BindingTarget;
 import io.github.lilaschuda.guanaco.config.GuanacoAggregateConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoCircuitBreakerConfig;
+import io.github.lilaschuda.guanaco.config.GuanacoDelayerConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoIdempotentConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoResequenceConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoThrottlerConfig;
@@ -27,6 +28,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
+import org.apache.camel.model.DelayDefinition;
 import org.apache.camel.model.ThrottleDefinition;
 import org.apache.camel.support.processor.idempotent.MemoryIdempotentRepository;
 
@@ -41,6 +43,7 @@ public class GuanacoRouteBuilder extends RouteBuilder {
     private final String processorName;
     private final RouteOutcomeRegistry outcomeRegistry;
     private final Map<String, AggregationStrategy> aggregationStrategies;
+    private final Map<String, GuanacoDelayStrategy> delayStrategies;
 
     private ProducerTemplate producerTemplate;
 
@@ -50,13 +53,15 @@ public class GuanacoRouteBuilder extends RouteBuilder {
             RouteConfig config,
             String processorName,
             RouteOutcomeRegistry outcomeRegistry,
-            Map<String, AggregationStrategy> aggregationStrategies) {
+            Map<String, AggregationStrategy> aggregationStrategies,
+            Map<String, GuanacoDelayStrategy> delayStrategies) {
         this.processor = processorInstance;
         this.routeInterface = routeInterface;
         this.config = config;
         this.processorName = processorName;
         this.outcomeRegistry = outcomeRegistry;
         this.aggregationStrategies = aggregationStrategies;
+        this.delayStrategies = delayStrategies;
     }
 
     @Override
@@ -408,6 +413,7 @@ public class GuanacoRouteBuilder extends RouteBuilder {
         if (targets.size() == 1) {
             BindingTarget target = targets.get(0);
             GuanacoThrottlerConfig throttler = config.resolveThrottlerFor(target);
+            GuanacoDelayerConfig delayer = config.resolveDelayerFor(target);
             GuanacoCircuitBreakerConfig cb = config.resolveCircuitBreakerFor(target);
 
             ChoiceDefinition branch = choice.when(exchange -> outcomeClass.isInstance(exchange.getProperty(OUTCOME_PROPERTY)));
@@ -421,6 +427,11 @@ public class GuanacoRouteBuilder extends RouteBuilder {
                 parent = applyThrottle(parent, throttler);
             }
 
+            if (delayer != null) {
+                log.info("[{}] Bound {} → {} (delayed)", processorName, outcomeName, target.getUri());
+                parent = applyDelay(parent, delayer);
+            }
+            
             if (cb != null) {
                 log.info("[{}] Bound {} → {} (circuit breaker enabled)", processorName, outcomeName, target.getUri());
                 GuanacoResilienceHelper.applyCircuitBreaker(parent, target.getUri(), cb);
@@ -488,5 +499,63 @@ public class GuanacoRouteBuilder extends RouteBuilder {
         }
 
         return throttle;
+    }
+    
+    /**
+     * Attaches a plain .to(uri) to whatever the innermost wrapping layer is —
+     * the branch itself if no policy applies, or the last-applied
+     * throttle/delay definition otherwise. Centralizing this avoids repeating a
+     * cast-per-policy-type at every "no circuit breaker" call site.
+     */
+    private void attachPlainTo(ProcessorDefinition<?> parent, String uri) {
+        if (parent instanceof ChoiceDefinition branch) {
+            branch.to(uri);
+        } else if (parent instanceof ThrottleDefinition throttle) {
+            throttle.to(uri);
+        } else if (parent instanceof DelayDefinition delay) {
+            delay.to(uri);
+        } else {
+            throw new GuanacoRouteBuilderException(
+                    "[" + processorName + "] Unexpected parent definition type: " + parent.getClass());
+        }
+    }
+
+    /**
+     * Applies a delay policy and returns the DelayDefinition itself, WITHOUT
+     * attaching .to(uri) — same "return the block, let the caller decide what
+     * nests inside it" pattern as applyThrottle. Resolves the delay Expression
+     * either as a fixed constant() or as a call into a registered
+     * GuanacoDelayStrategy, mirroring how splitExpression() bridges a custom
+     * computation into Camel's Expression interface elsewhere in this file.
+     */
+    private DelayDefinition applyDelay(ProcessorDefinition<?> parent, GuanacoDelayerConfig delayerConfig) {
+        Expression delayExpression;
+
+        if (delayerConfig.getDelayStrategyRef() != null) {
+            GuanacoDelayStrategy strategy = delayStrategies.get(delayerConfig.getDelayStrategyRef());
+            if (strategy == null) {
+                throw new GuanacoInspectionException(
+                        "[" + processorName + "] delayer.delayStrategyRef '" + delayerConfig.getDelayStrategyRef()
+                        + "' was not found among registered GuanacoDelayStrategy instances. Register it via "
+                        + "GuanacoContext.registerDelayStrategy(\"" + delayerConfig.getDelayStrategyRef()
+                        + "\", ...) before calling wireRoutes().");
+            }
+            delayExpression = new Expression() {
+                @Override
+                public <T> T evaluate(Exchange exchange, Class<T> type) {
+                    return type.cast(strategy.computeDelayMs(exchange));
+                }
+            };
+        } else {
+            delayExpression = constant(delayerConfig.getDelayMs());
+        }
+
+        DelayDefinition delay = parent.delay(delayExpression);
+
+        if (delayerConfig.resolveAsyncDelayed()) {
+            delay.asyncDelayed();
+        }
+
+        return delay;
     }
 }

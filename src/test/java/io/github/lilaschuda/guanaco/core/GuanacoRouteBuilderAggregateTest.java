@@ -45,7 +45,7 @@ class GuanacoRouteBuilderAggregateTest extends GuanacoRouteBuilderTestSupport {
                 new ToMerged(exchange.getIn().getBody(String.class));
 
         registerRoute(processor, ORDER_ROUTE_CLASS, config, "AggregateTest", registry,
-                Map.of("concat", concatStrategy));
+                Map.of("concat", concatStrategy), Map.of());
         context.start();
 
         MockEndpoint merged = context.getEndpoint("mock:merged", MockEndpoint.class);
@@ -81,7 +81,7 @@ class GuanacoRouteBuilderAggregateTest extends GuanacoRouteBuilderTestSupport {
 
         // No strategies registered at all — "doesNotExist" cannot resolve.
         assertThatThrownBy(() ->
-                registerRoute(processor, ORDER_ROUTE_CLASS, config, "AggregateTest", registry, Map.of()))
+                registerRoute(processor, ORDER_ROUTE_CLASS, config, "AggregateTest", registry, Map.of(), Map.of()))
                 .isInstanceOf(GuanacoRouteBuilderException.class)
                 .hasMessageContaining("doesNotExist");
     }

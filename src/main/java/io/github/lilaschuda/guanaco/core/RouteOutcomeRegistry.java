@@ -91,7 +91,7 @@ public class RouteOutcomeRegistry {
      * distinct classes.
      */
     protected static Map<String, Class<? extends RouteOutcome<?>>> buildRegistryMap(
-            Iterable<? extends Class<? extends RouteOutcome<?>>> candidates, String sourceDescription) {
+            Iterable<? extends Class<? extends RouteOutcome<?>>> candidates, String sourceDescription) throws GuanacoInspectionException {
 
         Map<String, Class<? extends RouteOutcome<?>>> registry = new HashMap<>();
         Map<String, Class<?>> seenBy = new HashMap<>();

@@ -12,6 +12,7 @@ public class BindingTarget {
     private String uri;
     private GuanacoCircuitBreakerConfig circuitBreaker;
     private GuanacoThrottlerConfig throttler;
+    private GuanacoDelayerConfig delayer;
 
     public String getUri() { return uri; }
     public void setUri(String uri) { this.uri = uri; }
@@ -23,5 +24,8 @@ public class BindingTarget {
     /** Null means "inherit the route-level throttler, if any." */
     public GuanacoThrottlerConfig getThrottler() { return throttler; }
     public void setThrottler(GuanacoThrottlerConfig throttler) { this.throttler = throttler; }
+    
+    public GuanacoDelayerConfig getDelayer() { return delayer; }
+    public void setDelayer(GuanacoDelayerConfig delayer) { this.delayer = delayer; }
 
 }

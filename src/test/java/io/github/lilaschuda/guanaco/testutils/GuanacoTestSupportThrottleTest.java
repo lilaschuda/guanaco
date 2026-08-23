@@ -2,19 +2,13 @@ package io.github.lilaschuda.guanaco.testutils;
 
 import io.github.lilaschuda.guanaco.config.BindingTarget;
 import io.github.lilaschuda.guanaco.config.GuanacoCircuitBreakerConfig;
-import io.github.lilaschuda.guanaco.config.GuanacoConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoThrottlerConfig;
-import io.github.lilaschuda.guanaco.core.GuanacoContext;
-import io.github.lilaschuda.guanaco.testutils.fixtures.ThrottleTestProcessor;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
-import org.junit.jupiter.api.BeforeEach;
-import org.springframework.context.ApplicationContext;
-import org.springframework.context.support.StaticApplicationContext;
 
 class GuanacoTestSupportThrottleTest {
 

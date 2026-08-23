@@ -3,6 +3,7 @@ package io.github.lilaschuda.guanaco.core;
 import io.github.lilaschuda.guanaco.config.BindingTarget;
 import io.github.lilaschuda.guanaco.config.GuanacoAggregateConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoConfig.ValidationMode;
+import io.github.lilaschuda.guanaco.config.GuanacoDelayerConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoResequenceConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoThrottlerConfig;
 import io.github.lilaschuda.guanaco.config.RouteConfig;
@@ -437,6 +438,135 @@ class BindingValidatorGuardrailTest {
         assertThatThrownBy(() -> validator.validateDslOnlyPolicyScope("Test", config, routeInterface))
                 .isInstanceOf(InvalidRouteConfigurationException.class)
                 .hasMessageContaining("throttler")
+                .hasMessageContaining("CrossCutting");
+    }
+    
+    // --- Delayer structural validation ---
+    @Test
+    void noDelayerBlock_isANoOp() {
+        RouteConfig config = new RouteConfig();
+        assertThatCode(() -> validator.validateDelayerConfig("Test", config))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void validFixedDelayMs_passes() {
+        RouteConfig config = new RouteConfig();
+        GuanacoDelayerConfig delayer = new GuanacoDelayerConfig();
+        delayer.setDelayMs(500L);
+        config.setDelayer(delayer);
+
+        assertThatCode(() -> validator.validateDelayerConfig("Test", config))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void validDelayStrategyRef_passes() {
+        RouteConfig config = new RouteConfig();
+        GuanacoDelayerConfig delayer = new GuanacoDelayerConfig();
+        delayer.setDelayStrategyRef("backoffStrategy");
+        config.setDelayer(delayer);
+
+        assertThatCode(() -> validator.validateDelayerConfig("Test", config))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void bothDelayMsAndDelayStrategyRefSet_throwsInvalidRouteConfigurationException() {
+        RouteConfig config = new RouteConfig();
+        GuanacoDelayerConfig delayer = new GuanacoDelayerConfig();
+        delayer.setDelayMs(500L);
+        delayer.setDelayStrategyRef("backoffStrategy");
+        config.setDelayer(delayer);
+
+        assertThatThrownBy(() -> validator.validateDelayerConfig("Test", config))
+                .isInstanceOf(InvalidRouteConfigurationException.class)
+                .hasMessageContaining("delayMs")
+                .hasMessageContaining("delayStrategyRef");
+    }
+
+    @Test
+    void neitherDelayMsNorDelayStrategyRefSet_throwsInvalidRouteConfigurationException() {
+        RouteConfig config = new RouteConfig();
+        GuanacoDelayerConfig delayer = new GuanacoDelayerConfig();
+        config.setDelayer(delayer);
+
+        assertThatThrownBy(() -> validator.validateDelayerConfig("Test", config))
+                .isInstanceOf(InvalidRouteConfigurationException.class)
+                .hasMessageContaining("exactly one");
+    }
+
+    @Test
+    void zeroDelayMs_throwsInvalidRouteConfigurationException() {
+        RouteConfig config = new RouteConfig();
+        GuanacoDelayerConfig delayer = new GuanacoDelayerConfig();
+        delayer.setDelayMs(0L);
+        config.setDelayer(delayer);
+
+        assertThatThrownBy(() -> validator.validateDelayerConfig("Test", config))
+                .isInstanceOf(InvalidRouteConfigurationException.class)
+                .hasMessageContaining("delayMs");
+    }
+
+    @Test
+    void negativeDelayMs_throwsInvalidRouteConfigurationException() {
+        RouteConfig config = new RouteConfig();
+        GuanacoDelayerConfig delayer = new GuanacoDelayerConfig();
+        delayer.setDelayMs(-100L);
+        config.setDelayer(delayer);
+
+        assertThatThrownBy(() -> validator.validateDelayerConfig("Test", config))
+                .isInstanceOf(InvalidRouteConfigurationException.class)
+                .hasMessageContaining("delayMs");
+    }
+
+    @Test
+    void disabledDelayer_skipsCompletenessCheckEvenWithNeitherValueSet() {
+        // enabled: false with nothing else set — this is the CORRECT shape for
+        // an opt-out override, same as the throttler equivalent. Must not
+        // throw despite having neither delayMs nor delayStrategyRef.
+        RouteConfig config = new RouteConfig();
+        GuanacoDelayerConfig delayer = new GuanacoDelayerConfig();
+        delayer.setEnabled(false);
+        config.setDelayer(delayer);
+
+        assertThatCode(() -> validator.validateDelayerConfig("Test", config))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void bindingLevelDelayerOverride_isValidatedTooWithFieldPathInMessage() {
+        BindingTarget target = new BindingTarget();
+        target.setUri("mock:partner");
+        GuanacoDelayerConfig badDelayer = new GuanacoDelayerConfig();
+        // neither delayMs nor delayStrategyRef set, and NOT disabled — invalid.
+        target.setDelayer(badDelayer);
+
+        RouteConfig config = new RouteConfig();
+        config.getBindings().put("ToPartner", List.of(target));
+
+        assertThatThrownBy(() -> validator.validateDelayerConfig("Test", config))
+                .isInstanceOf(InvalidRouteConfigurationException.class)
+                .hasMessageContaining("bindings.ToPartner.delayer")
+                .hasMessageContaining("exactly one");
+    }
+
+    @Test
+    void delayerOnNonSealedOutcome_throwsInvalidRouteConfigurationException() {
+        RouteConfig config = new RouteConfig();
+        BindingTarget target = new BindingTarget();
+        target.setUri("mock:audit");
+        GuanacoDelayerConfig delayer = new GuanacoDelayerConfig();
+        delayer.setDelayMs(500L);
+        target.setDelayer(delayer);
+        config.getBindings().put("CrossCutting", List.of(target));
+
+        @SuppressWarnings("unchecked")
+        Class<? extends RouteOutcome<?>> routeInterface = (Class<? extends RouteOutcome<?>>) (Class<?>) TestRoute.class;
+
+        assertThatThrownBy(() -> validator.validateDslOnlyPolicyScope("Test", config, routeInterface))
+                .isInstanceOf(InvalidRouteConfigurationException.class)
+                .hasMessageContaining("delayer")
                 .hasMessageContaining("CrossCutting");
     }
 }

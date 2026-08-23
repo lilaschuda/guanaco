@@ -48,6 +48,7 @@ public class GuanacoContext extends SpringCamelContext {
     // wireRoutes() time — resolution then happens exactly once per route,
     // at route-graph-construction time, never per-message.
     private final Map<String, AggregationStrategy> aggregationStrategies = new ConcurrentHashMap<>();
+    private final Map<String, GuanacoDelayStrategy> delayStrategies = new ConcurrentHashMap<>();
 
     public GuanacoContext(String basePackage) {
         this.basePackage = basePackage;
@@ -127,6 +128,7 @@ public class GuanacoContext extends SpringCamelContext {
 
         // Frozen snapshot handed to every builder — see field javadoc.
         Map<String, AggregationStrategy> strategiesSnapshot = Map.copyOf(aggregationStrategies);
+        Map<String, GuanacoDelayStrategy> delayStrategiesSnapshot = Map.copyOf(delayStrategies);
 
         Reflections reflections = new Reflections(basePackage);
         Set<Class<?>> rawProcessorClasses = reflections.getTypesAnnotatedWith(GuanacoRoute.class);
@@ -161,13 +163,14 @@ public class GuanacoContext extends SpringCamelContext {
             validator.validateIdempotentConfig(name, routeConfig);
             validator.validateResequenceConfig(name, routeConfig);
             validator.validateThrottlerConfig(name, routeConfig);
+            validator.validateDelayerConfig(name, routeConfig);
             validator.validateDslOnlyPolicyScope(name, routeConfig, routeInterface);
 
             Processor<RouteOutcome<?>> instance
                     = (Processor<RouteOutcome<?>>) processorClass.getDeclaredConstructor().newInstance();
 
             GuanacoRouteBuilder builder = new GuanacoRouteBuilder(
-                    instance, routeInterface, routeConfig, name, outcomeRegistry, strategiesSnapshot);
+                instance, routeInterface, routeConfig, name, outcomeRegistry, strategiesSnapshot, delayStrategiesSnapshot);
             this.addRoutes(builder);
 
             log.info("[{}] Route registered: {} → {} outcome(s)", name, routeConfig.getFrom(), outcomeNames.size());
@@ -202,4 +205,27 @@ public class GuanacoContext extends SpringCamelContext {
         }
         return processorClass.getSimpleName();
     }
+
+    public void registerDelayStrategy(String name, GuanacoDelayStrategy strategy) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("GuanacoDelayStrategy name must be provided and non-blank.");
+        }
+        if (strategy == null) {
+            throw new IllegalArgumentException("GuanacoDelayStrategy instance must not be null.");
+        }
+
+        GuanacoDelayStrategy previous = delayStrategies.putIfAbsent(name, strategy);
+        if (previous != null) {
+            throw new IllegalArgumentException(
+                    "A GuanacoDelayStrategy is already registered under name '" + name + "'. "
+                    + "Registration is explicit and must be unique — choose a different name.");
+        }
+
+        log.info("Registered GuanacoDelayStrategy '{}'", name);
+    }
+    
+    public Map<String, GuanacoDelayStrategy> getDelayStrategies(){
+        return delayStrategies;
+    }
+    
 }

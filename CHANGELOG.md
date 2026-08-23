@@ -5,6 +5,44 @@ All notable changes to Guanaco are documented here. Pre-1.0 versions are
 tagged release. Version numbers still advance one subversion per completed
 set of features, so the commit history stays easy to follow.
 
+## [0.7.0]
+
+### Added
+- **Delayer EIP**, completing the three dispatch-wrapping resiliency
+  policies (alongside Circuit Breaker and Throttler from v0.5.0/v0.6.0),
+  sharing the identical route-default/binding-override hierarchy.
+- **`GuanacoDelayStrategy`** — a compiled, per-exchange delay computation
+  interface, registered by name via `GuanacoContext.registerDelayStrategy(...)`.
+  Exists specifically so a computed delay (e.g. exponential backoff based
+  on a retry-count header) has a type-safe source, the same way
+  `AggregationStrategy`/`strategyRef` already works for Aggregate — no
+  Spring bean lookup, no reflection, no interpreted expression string.
+  A `delayer` block sets exactly one of `delayMs` (a fixed constant) or
+  `delayStrategyRef` (a registered `GuanacoDelayStrategy`) — these are
+  alternative sources for the same single value, not independent
+  conditions, so exactly one, not "at least one," is required.
+- **Fixed, non-configurable three-layer ordering** when Throttler, Delayer,
+  and Circuit Breaker all apply to the same binding: Throttle (outermost)
+  → Delay → Circuit Breaker (innermost). Delay sits between the two
+  deliberately — nesting it inside Circuit Breaker would count the
+  artificial pause toward the circuit breaker's own timeout measurement,
+  which could trip the breaker purely because of Guanaco's own injected
+  delay rather than genuine downstream latency.
+- `asyncDelayed` on `delayer` defaults to `false`, matching Camel's own
+  native default (blocking) rather than silently overriding it — a large
+  `delayMs` with `asyncDelayed` left unset will block the calling route
+  thread for the full duration. Documented explicitly as a footgun to be
+  aware of, not silently guarded against.
+- `GuanacoTestSupport.registerDelayStrategy(...)` and `.withRouteDelayer(...)`,
+  completing the same test-support surface already available for Throttler
+  and Circuit Breaker.
+
+This completes Tier 2 of the roadmap (Circuit Breaker, Throttler, Delayer) —
+all three dispatch-wrapping resiliency policies identified during the
+v0.5.0 schema design conversation are now implemented, validated, and
+tested, including their three-way interaction when combined on a single
+binding.
+
 ## [0.6.0]
 
 ### Added

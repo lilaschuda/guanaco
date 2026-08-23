@@ -30,7 +30,7 @@ class GuanacoRouteBuilderIdempotentTest extends GuanacoRouteBuilderTestSupport {
         Processor<RouteOutcome<?>> processor = exchange ->
                 new ToInventory(exchange.getIn().getBody(String.class));
 
-        registerRoute(processor, ORDER_ROUTE_CLASS, config, "IdempotentTest", registry, Map.of());
+        registerRoute(processor, ORDER_ROUTE_CLASS, config, "IdempotentTest", registry, Map.of(), Map.of());
         context.start();
 
         MockEndpoint inventory = context.getEndpoint("mock:inventory", MockEndpoint.class);
@@ -64,7 +64,7 @@ class GuanacoRouteBuilderIdempotentTest extends GuanacoRouteBuilderTestSupport {
         Processor<RouteOutcome<?>> processor = exchange ->
                 new ToInventory(exchange.getIn().getBody(String.class));
 
-        registerRoute(processor, ORDER_ROUTE_CLASS, config, "IdempotentTest", registry, Map.of());
+        registerRoute(processor, ORDER_ROUTE_CLASS, config, "IdempotentTest", registry, Map.of(), Map.of());
         context.start();
 
         MockEndpoint inventory = context.getEndpoint("mock:inventory", MockEndpoint.class);

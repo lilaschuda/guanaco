@@ -32,7 +32,7 @@ class GuanacoRouteBuilderResequenceTest extends GuanacoRouteBuilderTestSupport {
         Processor<RouteOutcome<?>> processor = exchange ->
                 new ToOrdered(exchange.getIn().getBody(String.class));
 
-        registerRoute(processor, ORDER_ROUTE_CLASS, config, "ResequenceBatchTest", registry, Map.of());
+        registerRoute(processor, ORDER_ROUTE_CLASS, config, "ResequenceBatchTest", registry, Map.of(), Map.of());
         context.start();
 
         MockEndpoint ordered = context.getEndpoint("mock:ordered", MockEndpoint.class);
@@ -62,7 +62,7 @@ class GuanacoRouteBuilderResequenceTest extends GuanacoRouteBuilderTestSupport {
         Processor<RouteOutcome<?>> processor = exchange ->
                 new ToOrdered(exchange.getIn().getBody(String.class));
 
-        registerRoute(processor, ORDER_ROUTE_CLASS, config, "ResequenceStreamTest", registry, Map.of());
+        registerRoute(processor, ORDER_ROUTE_CLASS, config, "ResequenceStreamTest", registry, Map.of(), Map.of());
         context.start();
 
         MockEndpoint ordered = context.getEndpoint("mock:ordered", MockEndpoint.class);
@@ -118,7 +118,7 @@ class GuanacoRouteBuilderResequenceTest extends GuanacoRouteBuilderTestSupport {
                 new ToOrdered(exchange.getIn().getBody(String.class));
 
         registerRoute(processor, ORDER_ROUTE_CLASS, config, "FullPipelineTest", registry,
-                Map.of("concat", concatStrategy));
+                Map.of("concat", concatStrategy), Map.of());
         context.start();
 
         MockEndpoint merged = context.getEndpoint("mock:merged", MockEndpoint.class);

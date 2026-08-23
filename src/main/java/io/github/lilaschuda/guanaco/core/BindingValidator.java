@@ -3,6 +3,7 @@ package io.github.lilaschuda.guanaco.core;
 import io.github.lilaschuda.guanaco.config.BindingTarget;
 import io.github.lilaschuda.guanaco.config.GuanacoAggregateConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoConfig.ValidationMode;
+import io.github.lilaschuda.guanaco.config.GuanacoDelayerConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoIdempotentConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoResequenceConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoThrottlerConfig;
@@ -273,6 +274,9 @@ public class BindingValidator {
                 if (target.getThrottler() != null) {
                     throw scopeViolation(processorName, entry.getKey(), "throttler", routeInterface);
                 }
+                if (target.getDelayer() != null) {
+                    throw scopeViolation(processorName, entry.getKey(), "delayer", routeInterface);
+                }
             }
         }
     }
@@ -335,6 +339,48 @@ public class BindingValidator {
 
         log.info("[{}] {} validated OK — requestsPerPeriod={}, timePeriodMillis={}",
                 processorName, fieldDescription, throttler.getRequestsPerPeriod(), throttler.getTimePeriodMillis());
+    }
+
+    public void validateDelayerConfig(String processorName, RouteConfig routeConfig) {
+        validateDelayerShape(processorName, "delayer", routeConfig.getDelayer());
+
+        for (Map.Entry<String, List<BindingTarget>> entry : routeConfig.getBindings().entrySet()) {
+            for (BindingTarget target : entry.getValue()) {
+                if (target.getDelayer() != null) {
+                    validateDelayerShape(processorName, "bindings." + entry.getKey() + ".delayer", target.getDelayer());
+                }
+            }
+        }
+    }
+
+    private void validateDelayerShape(String processorName, String fieldDescription, GuanacoDelayerConfig delayer) {
+        if (delayer == null) {
+            return;
+        }
+
+        if (!delayer.resolveEnabled()) {
+            log.debug("[{}] {} is explicitly disabled — skipping completeness check.", processorName, fieldDescription);
+            return;
+        }
+
+        boolean hasFixed = delayer.getDelayMs() != null;
+        boolean hasStrategy = delayer.getDelayStrategyRef() != null && !delayer.getDelayStrategyRef().isBlank();
+
+        if (hasFixed && hasStrategy) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] " + fieldDescription + " sets both delayMs and delayStrategyRef — "
+                    + "these are alternative sources for the same value. Set exactly one.");
+        }
+
+        if (!hasFixed && !hasStrategy) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] " + fieldDescription + " must set exactly one of delayMs or delayStrategyRef.");
+        }
+
+        if (hasFixed && delayer.getDelayMs() <= 0) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] " + fieldDescription + ".delayMs must be greater than zero.");
+        }
     }
 
     private void checkUri(String processorName, String fieldDescription, String uri) {

@@ -60,7 +60,7 @@ class GuanacoRouteBuilderIdempotentAggregateOrderingTest extends GuanacoRouteBui
                 new ToMerged(exchange.getIn().getBody(String.class));
 
         registerRoute(processor, ORDER_ROUTE_CLASS, config, "OrderingTest", registry,
-                Map.of("concat", concatStrategy));
+                Map.of("concat", concatStrategy), Map.of());
         context.start();
 
         MockEndpoint merged = context.getEndpoint("mock:merged", MockEndpoint.class);

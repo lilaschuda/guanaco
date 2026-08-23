@@ -163,9 +163,9 @@ guanacoContext.registerAggregationStrategy("orderMergeStrategy", new OrderMergeS
 
 Correlates and merges multiple incoming messages into one before your processor ever runs. The merge strategy is a plain, compiled `org.apache.camel.AggregationStrategy` registered by name — no Spring bean lookup, no reflection. `correlationHeader`/`sequenceHeader`/`messageIdHeader` are all resolved the same way across these three EIPs: Camel's type-safe `header(name)` builder, never an interpreted expression string.
 
-## Resiliency policies: Circuit Breaker and Throttler
+## Resiliency policies: Throttler, Delayer, and Circuit Breaker
 
-Circuit Breaker and Throttler share a single hierarchical configuration model: declare a policy at the route level as the default for every binding, and optionally override it per binding for a specific target. A binding can also opt out of an inherited route-level policy entirely with `enabled: false`.
+Throttler, Delayer, and Circuit Breaker share a single hierarchical configuration model: declare a policy at the route level as the default for every binding, and optionally override it per binding for a specific target. A binding can also opt out of an inherited route-level policy entirely with `enabled: false`.
 
 ```yaml
 routes:
@@ -184,11 +184,13 @@ routes:
         throttler:                     # overrides the route default for this binding only
           requestsPerPeriod: 50
           timePeriodMillis: 1000
+        delayer:
+          delayStrategyRef: backoffStrategy
         circuitBreaker:
           enabled: false               # opts this binding out of the inherited circuit breaker
 ```
 
-When both apply to the same binding, **Throttle always wraps outermost, Circuit Breaker innermost** — admission control (should this call even be attempted right now) happens before failure detection (did the attempted call succeed). This ordering is fixed and not configurable.
+When more than one applies to the same binding, the fixed, non-configurable order is **Throttle (outermost) → Delay → Circuit Breaker (innermost)**. Throttle is admission control (should this call even be attempted right now); Circuit Breaker is failure detection on the attempt itself. Delay sits between the two deliberately — nesting it inside Circuit Breaker would count the artificial pause toward the circuit breaker's own timeout measurement, which could trip the breaker purely because of Guanaco's own injected delay rather than genuine downstream latency.
 
 ### Throttler
 
@@ -202,6 +204,33 @@ throttler:
 
 `asyncDelayed` and `rejectExecution` are mutually exclusive — "never wait" and "wait without blocking" are contradictory, and setting both is rejected at boot. Leave both unset for Camel's default blocking queue-and-wait behavior. A message rejected via `rejectExecution: true` propagates through the route's normal error handling (`errorHandler.deadLetter`, if configured), the same as any other exception — no separate failure-handling mechanism needed.
 
+### Delayer
+
+```yaml
+delayer:
+  delayMs: 500              # mutually exclusive with delayStrategyRef
+  # OR:
+  # delayStrategyRef: backoffStrategy
+  asyncDelayed: false        # optional, default false — matches Camel's own native default
+```
+
+Exactly one of `delayMs` (a fixed constant) or `delayStrategyRef` must be set — these are alternative sources for the same single value, not independent conditions. `delayStrategyRef` points to a compiled, registered `GuanacoDelayStrategy`, computed per-exchange in real Java — full access to headers, body, and properties to compute an arbitrary delay (e.g. exponential backoff based on a retry-count header), while still running through Camel's actual delay scheduler rather than anything hand-rolled:
+
+```java
+public interface GuanacoDelayStrategy {
+    long computeDelayMs(Exchange exchange);
+}
+```
+
+```java
+guanacoContext.registerDelayStrategy("backoffStrategy", exchange -> {
+    int attempt = exchange.getIn().getHeader("retryCount", 0, Integer.class);
+    return Math.min(1000L * (1L << attempt), 30_000L); // exponential backoff, capped
+});
+```
+
+`asyncDelayed` defaults to `false`, matching Camel's own native default (blocking) — **not** silently overridden to non-blocking. A large `delayMs` with `asyncDelayed` left unset will block the calling route thread for the full duration; set `asyncDelayed: true` explicitly for any production hot path where that matters.
+
 ### Circuit Breaker
 
 ```yaml
@@ -214,9 +243,9 @@ circuitBreaker:
 
 Backed by Camel's Resilience4j integration, configured via plain setters on `Resilience4jConfigurationDefinition` rather than a long fluent DSL chain — a deliberate choice after several fluent-chain generics mismatches elsewhere in this codebase made the setter-based approach the more reliable one to build against.
 
-### Scope: both policies only apply to `choice()`-dispatched bindings
+### Scope: all three policies only apply to `choice()`-dispatched bindings
 
-Circuit Breaker and Throttler are both wired as Camel DSL nodes wrapping a `.to(...)` call. `Multicast` and `Split` dispatch via an imperative `producerTemplate.send()` call instead — specifically so their destinations can be resolved dynamically by simple class name against the closed-world registry — and there's no DSL node there for either policy to wrap. A per-binding `circuitBreaker` or `throttler` override on an outcome that isn't a permitted subtype of the processor's own sealed hierarchy is rejected at boot, since such an outcome is only ever reachable via Multicast/Split.
+Throttler, Delayer, and Circuit Breaker are all wired as Camel DSL nodes wrapping a `.to(...)` call. `Multicast` and `Split` dispatch via an imperative `producerTemplate.send()` call instead — specifically so their destinations can be resolved dynamically by simple class name against the closed-world registry — and there's no DSL node there for any of the three to wrap. A per-binding policy override on an outcome that isn't a permitted subtype of the processor's own sealed hierarchy is rejected at boot, since such an outcome is only ever reachable via Multicast/Split.
 
 One residual case isn't statically decidable and isn't caught: an outcome that *is* a permitted sealed-hierarchy member, but that developer code *also* happens to emit via `Multicast`/`Split`. In that specific case, the policy silently won't apply on the Multicast/Split path. This is a known, documented limitation rather than a silent gap.
 
@@ -227,6 +256,8 @@ One residual case isn't statically decidable and isn't caught: an outcome that *
 ```java
 GuanacoRuntimeEnvironment env = new GuanacoTestSupport("com.example.myapp")
     .withRouteThrottler(routeThrottler)          // optional route-level default
+    .withRouteDelayer(routeDelayer)               // optional route-level default
+    .registerDelayStrategy("backoffStrategy", myStrategy)
     .route("OrderProcessor", "direct:orders", Map.of(
         "ToAudit",   List.of(auditTarget),
         "ToPartner", List.of(partnerTarget)))
