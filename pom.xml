@@ -12,6 +12,33 @@
     <name>guanaco</name>
     <description>An idiomatic Java DSL for Apache Camel, with compiler-checked routes.</description>
 
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <scm>
+        <connection>scm:git:https://github.com/lilaschuda/guanaco.git</connection>
+        <developerConnection>scm:git:git@github.com:lilaschuda/guanaco.git</developerConnection>
+        <url>https://github.com/lilaschuda/guanaco</url>
+        <tag>HEAD</tag>
+    </scm>
+
+    <developers>
+        <developer>
+            <id>lilaschuda</id>
+            <name>Cristián Felipe Varas Schuda</name>
+            <url>https://github.com/lilaschuda</url>
+            <roles>
+                <role>architect</role>
+                <role>developer</role>
+            </roles>
+        </developer>
+    </developers>
+
     <properties>
         <java.version>21</java.version>
         <maven.compiler.source>21</maven.compiler.source>
