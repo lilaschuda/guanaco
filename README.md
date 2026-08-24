@@ -4,7 +4,10 @@
 
 Guanaco is a thin DSL layer on top of [Apache Camel](https://camel.apache.org/) that replaces Camel's fluent Java DSL and XML route definitions with plain Java: sealed interfaces, pattern matching, and records. Route topology is enforced by the compiler instead of discovered at runtime. Endpoint bindings live in a JSON or YAML file, so routes can be rewired in production — a ConfigMap update and a restart — without recompiling or redeploying new code.
 
-Guanaco does not replace Camel's runtime, its component ecosystem, or its connectors. It sits on top of them.
+Guanaco does not replace Camel's runtime, its component ecosystem, or its connectors. It sits on top of them:
+- Built on the shoulders of giants: Guanaco is 100% powered by the Apache Camel runtime engine.
+- Bringing compile-time safety and Java 17/21+ pattern matching to the world's most proven integration framework.
+- Zero lock-in: Enhances existing CamelContext topologies alongside legacy Java DSL and XML route definitions.
 
 > **Not affiliated with the Apache Software Foundation.** Guanaco is an independent, unofficial project built on top of Apache Camel. It is not endorsed by, sponsored by, or otherwise affiliated with the Apache Software Foundation. "Apache," "Camel," "Apache Camel," and the Apache feather logo are trademarks of The Apache Software Foundation.
 
