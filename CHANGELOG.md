@@ -8,6 +8,11 @@ set of features, so the commit history stays easy to follow.
 ## [0.7.0]
 
 ### Added
+- `waitDurationInOpenStateMs` on `GuanacoCircuitBreakerConfig`
+  controls how long Resilience4j keeps the circuit open before probing again.
+  Surfaced specifically to make circuit breaker recovery observable in a
+  reasonable timeframe (rather than Resilience4j's own 60s default), and
+  as a generally useful extension point for custom recovery timing.
 - **Delayer EIP**, completing the three dispatch-wrapping resiliency
   policies (alongside Circuit Breaker and Throttler from v0.5.0/v0.6.0),
   sharing the identical route-default/binding-override hierarchy.
