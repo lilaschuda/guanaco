@@ -30,6 +30,10 @@ public class GuanacoResilienceHelper {
         if (config.getMinimumNumberOfCalls() != null) {
             r4j.setMinimumNumberOfCalls(String.valueOf(config.getMinimumNumberOfCalls()));
         }
+        
+        if (config.getWaitDurationInOpenStateMs() != null) {
+            r4j.setWaitDurationInOpenState(String.valueOf(config.getWaitDurationInOpenStateMs()));
+        }
 
         cb.setResilience4jConfiguration(r4j);
         cb.to(targetUri);

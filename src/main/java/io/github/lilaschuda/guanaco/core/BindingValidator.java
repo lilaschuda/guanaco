@@ -2,6 +2,7 @@ package io.github.lilaschuda.guanaco.core;
 
 import io.github.lilaschuda.guanaco.config.BindingTarget;
 import io.github.lilaschuda.guanaco.config.GuanacoAggregateConfig;
+import io.github.lilaschuda.guanaco.config.GuanacoCircuitBreakerConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoConfig.ValidationMode;
 import io.github.lilaschuda.guanaco.config.GuanacoDelayerConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoIdempotentConfig;
@@ -126,6 +127,28 @@ public class BindingValidator {
                             + "circuit breaker DSL node. Remove this override.");
                 }
             }
+        }
+    }
+
+    public void validateCircuitBreakerConfig(String processorName, RouteConfig routeConfig) {
+        validateCircuitBreakerShape(processorName, "circuitBreaker", routeConfig.getCircuitBreaker());
+
+        for (Map.Entry<String, List<BindingTarget>> entry : routeConfig.getBindings().entrySet()) {
+            for (BindingTarget target : entry.getValue()) {
+                if (target.getCircuitBreaker() != null) {
+                    validateCircuitBreakerShape(processorName, "bindings." + entry.getKey() + ".circuitBreaker", target.getCircuitBreaker());
+                }
+            }
+        }
+    }
+
+    private void validateCircuitBreakerShape(String processorName, String fieldDescription, GuanacoCircuitBreakerConfig cb) {
+        if (cb == null || !cb.resolveEnabled()) {
+            return;
+        }
+        if (cb.getWaitDurationInOpenStateMs() != null && cb.getWaitDurationInOpenStateMs() <= 0) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] " + fieldDescription + ".waitDurationInOpenStateMs must be greater than zero if specified.");
         }
     }
 

@@ -165,6 +165,7 @@ public class GuanacoContext extends SpringCamelContext {
             validator.validateThrottlerConfig(name, routeConfig);
             validator.validateDelayerConfig(name, routeConfig);
             validator.validateDslOnlyPolicyScope(name, routeConfig, routeInterface);
+            validator.validateCircuitBreakerConfig(name, routeConfig);
 
             Processor<RouteOutcome<?>> instance
                     = (Processor<RouteOutcome<?>>) processorClass.getDeclaredConstructor().newInstance();

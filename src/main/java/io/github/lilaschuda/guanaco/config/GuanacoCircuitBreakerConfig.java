@@ -23,6 +23,7 @@ public class GuanacoCircuitBreakerConfig {
     private Integer slidingWindowSize;
     private Integer minimumNumberOfCalls;
     private Integer failureRateThreshold;
+    private Long waitDurationInOpenStateMs;
 
     public Boolean getEnabled() { return enabled; }
     public void setEnabled(Boolean enabled) { this.enabled = enabled; }
@@ -42,4 +43,7 @@ public class GuanacoCircuitBreakerConfig {
 
     public Integer getFailureRateThreshold() { return failureRateThreshold; }
     public void setFailureRateThreshold(Integer failureRateThreshold) { this.failureRateThreshold = failureRateThreshold; }
+    
+    public Long getWaitDurationInOpenStateMs() { return waitDurationInOpenStateMs; }
+    public void setWaitDurationInOpenStateMs(Long waitDurationInOpenStateMs) { this.waitDurationInOpenStateMs = waitDurationInOpenStateMs; }
 }
