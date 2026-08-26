@@ -41,9 +41,7 @@ public class GuanacoRouteBuilder extends RouteBuilder {
     private final Class<? extends RouteOutcome<?>> routeInterface;
     private final RouteConfig config;
     private final String processorName;
-    private final RouteOutcomeRegistry outcomeRegistry;
-    private final Map<String, AggregationStrategy> aggregationStrategies;
-    private final Map<String, GuanacoDelayStrategy> delayStrategies;
+    private final GuanacoRuntimeContext runtimeContext;
 
     private ProducerTemplate producerTemplate;
 
@@ -52,16 +50,12 @@ public class GuanacoRouteBuilder extends RouteBuilder {
             Class<? extends RouteOutcome<?>> routeInterface,
             RouteConfig config,
             String processorName,
-            RouteOutcomeRegistry outcomeRegistry,
-            Map<String, AggregationStrategy> aggregationStrategies,
-            Map<String, GuanacoDelayStrategy> delayStrategies) {
+            GuanacoRuntimeContext runtimeContext) {
         this.processor = processorInstance;
         this.routeInterface = routeInterface;
         this.config = config;
         this.processorName = processorName;
-        this.outcomeRegistry = outcomeRegistry;
-        this.aggregationStrategies = aggregationStrategies;
-        this.delayStrategies = delayStrategies;
+        this.runtimeContext = runtimeContext;
     }
 
     @Override
@@ -168,7 +162,7 @@ public class GuanacoRouteBuilder extends RouteBuilder {
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private ProcessorDefinition wireAggregate(ProcessorDefinition parent, GuanacoAggregateConfig aggConfig) {
-        AggregationStrategy strategy = aggregationStrategies.get(aggConfig.getStrategyRef());
+        AggregationStrategy strategy = runtimeContext.aggregationStrategies().get(aggConfig.getStrategyRef());
 
         if (strategy == null) {
             throw new GuanacoRouteBuilderException(
@@ -281,7 +275,7 @@ public class GuanacoRouteBuilder extends RouteBuilder {
 
         exchange.getIn().setBody(outcome.body());
     }
-
+   
     private void fanOut(Exchange exchange) {
         Object outcomeProperty = exchange.getProperty(OUTCOME_PROPERTY);
         if (!(outcomeProperty instanceof Multicast multicast)) {
@@ -328,7 +322,7 @@ public class GuanacoRouteBuilder extends RouteBuilder {
     private boolean isRegistered(RouteOutcome<?> outcome) {
         String simpleName = outcome.getClass().getSimpleName();
 
-        if (!outcomeRegistry.contains(simpleName)) {
+        if (!runtimeContext.outcomeRegistry().contains(simpleName)) {
             log.error("[{}] Rejected outcome of type '{}' ({}) — not found in the boot-time " +
                     "RouteOutcomeRegistry. This outcome was constructed at runtime but was never " +
                     "scanned; it may belong to a package outside the configured base package, or " +
@@ -524,7 +518,7 @@ public class GuanacoRouteBuilder extends RouteBuilder {
         Expression delayExpression;
 
         if (delayerConfig.getDelayStrategyRef() != null) {
-            GuanacoDelayStrategy strategy = delayStrategies.get(delayerConfig.getDelayStrategyRef());
+            GuanacoDelayStrategy strategy = runtimeContext.delayStrategies().get(delayerConfig.getDelayStrategyRef());
             if (strategy == null) {
                 throw new GuanacoRouteBuilderException(
                         "[" + processorName + "] delayer.delayStrategyRef '" + delayerConfig.getDelayStrategyRef()

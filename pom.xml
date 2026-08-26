@@ -6,7 +6,7 @@
 
     <groupId>io.github.lilaschuda</groupId>
     <artifactId>guanaco</artifactId>
-    <version>0.8.0-SNAPSHOT</version>
+    <version>0.9.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>guanaco</name>
@@ -161,7 +161,17 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
 	    </plugin>
-
+            <plugin>
+    		<groupId>org.apache.maven.plugins</groupId>
+    		<artifactId>maven-javadoc-plugin</artifactId>
+    		<version>3.6.3</version>
+		<configuration>
+	            <doclint>none</doclint>
+        	    <source>21</source>
+        	    <show>protected</show>
+        	    <nohelp>true</nohelp>
+    		</configuration>
+	    </plugin>
         </plugins>
     </build>
 </project>

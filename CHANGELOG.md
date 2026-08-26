@@ -4,6 +4,63 @@ All notable changes to Guanaco are documented here. Pre-1.0 versions are
 `-SNAPSHOT` and not published as tagged releases — v1.0.0 will be the first
 tagged release. Version numbers still advance one subversion per completed
 set of features, so the commit history stays easy to follow.
+
+## [0.9.0]
+
+A review-and-refactor pass, no new EIPs — closing structural debt that had
+accumulated across six EIPs' worth of reactive, per-turn additions before
+the v1.0 API freeze locks the shape in.
+
+### Fixed
+- **Real bug**: a binding with only a `delayer` configured — no `throttler`,
+  no `circuitBreaker` — was wired incorrectly. `addBranch`'s inline dispatch
+  logic never handled that specific combination, so `.to(uri)` was attached
+  to the wrong parent definition (bypassing the delay entirely) instead of
+  the `DelayDefinition` itself. The already-written but never-called
+  `attachPlainTo(...)` helper — which correctly handles all three possible
+  parent shapes — is now actually used for every combination, rather than
+  duplicated, incomplete inline logic. Caught by a new regression test;
+  this combination was never exercised by any prior test or the
+  `04-resiliency-pipeline` demo, whose `ToPartner` binding always had all
+  three policies together.
+- `applyDelay`'s missing-`delayStrategyRef` failure now throws
+  `GuanacoRouteBuilderException`, matching `wireAggregate`'s equivalent
+  missing-`strategyRef` failure — previously threw `GuanacoInspectionException`,
+  a different type for the structurally identical situation.
+- Closed an encapsulation leak: `GuanacoContext.getDelayStrategies()`
+  exposed the live, mutable strategy map directly, letting
+  `GuanacoTestSupport` bypass `registerDelayStrategy`'s null/blank-name and
+  duplicate-registration guards entirely. Removed; `GuanacoTestSupport` now
+  goes through `registerDelayStrategy`/`registerAggregationStrategy` like
+  every other caller.
+- Removed a dead, unused `GuanacoContext(String, ApplicationContext)`
+  constructor overload — added for a test-setup need that was fixed a
+  different way before this overload was ever actually used anywhere.
+
+### Changed
+- **`GuanacoRuntimeContext`**, a new record bundling `RouteOutcomeRegistry`,
+  the `AggregationStrategy` map, and the `GuanacoDelayStrategy` map — the
+  boot-time-global state shared by every route built in one `wireRoutes()`
+  pass, as distinct from a route's own per-route specifics. Replaces three
+  separate constructor parameters on `GuanacoRouteBuilder` (which had grown
+  to seven total, one added reactively per EIP) with one. A future EIP
+  needing its own named, boot-time registry adds a field to this record,
+  not a new `GuanacoRouteBuilder` constructor parameter — this is the
+  intended extension point, chosen deliberately ahead of the v1.0
+  constructor freeze in `ROADMAP.md`.
+- `GuanacoTestSupport` gained `withRouteAggregate(...)`,
+  `withRouteIdempotent(...)`, `withRouteResequence(...)`, and
+  `registerAggregationStrategy(...)` — closing a real gap where the three
+  Tier 1 message-stream EIPs had no test-support hooks at all, unlike the
+  three Tier 2 resiliency policies. Every hook (old and new) now has an
+  end-to-end test proving it actually wires through, not just that the
+  field exists.
+
+`GuanacoRouteBuilderTestSupport`'s `registerRoute(...)` overloads keep
+their existing signatures unchanged — internally rebuilt to construct a
+`GuanacoRuntimeContext` rather than passing three maps, so no existing
+test call site needed to change.
+
 ## [0.8.0]
 ### Fixed(core): resolve delayer dispatch wiring, unify strategy exceptions, and secure context encapsulation
 

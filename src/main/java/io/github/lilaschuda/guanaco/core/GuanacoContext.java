@@ -20,7 +20,6 @@ import org.apache.camel.spi.Resource;
 import org.apache.camel.spring.SpringCamelContext;
 import org.apache.camel.support.PluginHelper;
 import org.apache.camel.support.ResourceHelper;
-import org.springframework.context.ApplicationContext;
 
 /**
  * Main entry point for camel-guanaco.
@@ -43,10 +42,13 @@ public class GuanacoContext extends SpringCamelContext {
     private final ConfigLoader configLoader;
     private final TopologyInspector inspector;
 
-    // Populated via registerAggregationStrategy() before wireRoutes() is
-    // called. A frozen snapshot is handed to each GuanacoRouteBuilder at
-    // wireRoutes() time — resolution then happens exactly once per route,
-    // at route-graph-construction time, never per-message.
+    // Populated via registerAggregationStrategy()/registerDelayStrategy()
+    // before wireRoutes() is called. A frozen GuanacoRuntimeContext snapshot
+    // is handed to each GuanacoRouteBuilder at wireRoutes() time — resolution
+    // then happens exactly once per route, at route-graph-construction time,
+    // never per-message. No external accessor exposes these maps directly —
+    // registration always goes through registerX(...), so its
+    // null/blank/duplicate guards can never be bypassed.
     private final Map<String, AggregationStrategy> aggregationStrategies = new ConcurrentHashMap<>();
     private final Map<String, GuanacoDelayStrategy> delayStrategies = new ConcurrentHashMap<>();
 
@@ -54,14 +56,6 @@ public class GuanacoContext extends SpringCamelContext {
         this.basePackage = basePackage;
         this.configLoader = new ConfigLoader();
         this.inspector = new TopologyInspector();
-    }
-    
-    //Overload with custom ApplicationContext for tests support
-    public GuanacoContext(String basePackage, ApplicationContext applicationContext){
-        this.basePackage = basePackage;
-        this.configLoader = new ConfigLoader();
-        this.inspector = new TopologyInspector();
-        this.setApplicationContext(applicationContext);
     }
 
     /**
@@ -97,6 +91,32 @@ public class GuanacoContext extends SpringCamelContext {
     }
 
     /**
+     * Registers a native, Java-constructed GuanacoDelayStrategy under a name
+     * that {@code delayer.delayStrategyRef} can reference. Same registration
+     * discipline as {@link #registerAggregationStrategy}.
+     *
+     * @throws IllegalArgumentException if name or strategy is null/blank,
+     *         or if a strategy is already registered under this name.
+     */
+    public void registerDelayStrategy(String name, GuanacoDelayStrategy strategy) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("GuanacoDelayStrategy name must be provided and non-blank.");
+        }
+        if (strategy == null) {
+            throw new IllegalArgumentException("GuanacoDelayStrategy instance must not be null.");
+        }
+
+        GuanacoDelayStrategy previous = delayStrategies.putIfAbsent(name, strategy);
+        if (previous != null) {
+            throw new IllegalArgumentException(
+                    "A GuanacoDelayStrategy is already registered under name '" + name + "'. " +
+                    "Registration is explicit and must be unique — choose a different name.");
+        }
+
+        log.info("Registered GuanacoDelayStrategy '{}'", name);
+    }
+
+    /**
      * Supplies the route configurations wireRoutes() operates on. Defaults to
      * loading from routes.yaml/json via ConfigLoader. Overridable so test
      * support code (see GuanacoTestSupport) can inject route configs built
@@ -108,7 +128,8 @@ public class GuanacoContext extends SpringCamelContext {
 
     /**
      * Scans for @GuanacoRoute processors, validates their topology against
-     * routes.yaml, and registers the generated routes with this context.
+     * the configured routes, and registers the generated routes with this
+     * context.
      *
      * Call this BEFORE start().
      */
@@ -126,9 +147,10 @@ public class GuanacoContext extends SpringCamelContext {
 
         RouteOutcomeRegistry outcomeRegistry = RouteOutcomeRegistry.scan(basePackage);
 
-        // Frozen snapshot handed to every builder — see field javadoc.
-        Map<String, AggregationStrategy> strategiesSnapshot = Map.copyOf(aggregationStrategies);
-        Map<String, GuanacoDelayStrategy> delayStrategiesSnapshot = Map.copyOf(delayStrategies);
+        // Frozen snapshot handed to every builder as one bundle — see
+        // GuanacoRuntimeContext and the field javadoc above.
+        GuanacoRuntimeContext runtimeContext = new GuanacoRuntimeContext(
+                outcomeRegistry, Map.copyOf(aggregationStrategies), Map.copyOf(delayStrategies));
 
         Reflections reflections = new Reflections(basePackage);
         Set<Class<?>> rawProcessorClasses = reflections.getTypesAnnotatedWith(GuanacoRoute.class);
@@ -171,7 +193,7 @@ public class GuanacoContext extends SpringCamelContext {
                     = (Processor<RouteOutcome<?>>) processorClass.getDeclaredConstructor().newInstance();
 
             GuanacoRouteBuilder builder = new GuanacoRouteBuilder(
-                instance, routeInterface, routeConfig, name, outcomeRegistry, strategiesSnapshot, delayStrategiesSnapshot);
+                    instance, routeInterface, routeConfig, name, runtimeContext);
             this.addRoutes(builder);
 
             log.info("[{}] Route registered: {} → {} outcome(s)", name, routeConfig.getFrom(), outcomeNames.size());
@@ -206,23 +228,4 @@ public class GuanacoContext extends SpringCamelContext {
         }
         return processorClass.getSimpleName();
     }
-
-    public void registerDelayStrategy(String name, GuanacoDelayStrategy strategy) {
-        if (name == null || name.isBlank()) {
-            throw new IllegalArgumentException("GuanacoDelayStrategy name must be provided and non-blank.");
-        }
-        if (strategy == null) {
-            throw new IllegalArgumentException("GuanacoDelayStrategy instance must not be null.");
-        }
-
-        GuanacoDelayStrategy previous = delayStrategies.putIfAbsent(name, strategy);
-        if (previous != null) {
-            throw new IllegalArgumentException(
-                    "A GuanacoDelayStrategy is already registered under name '" + name + "'. "
-                    + "Registration is explicit and must be unique — choose a different name.");
-        }
-
-        log.info("Registered GuanacoDelayStrategy '{}'", name);
-    }
-    
 }

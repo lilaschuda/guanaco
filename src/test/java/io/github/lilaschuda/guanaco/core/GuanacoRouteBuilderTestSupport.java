@@ -33,13 +33,14 @@ public abstract class GuanacoRouteBuilderTestSupport {
     }
 
     protected void registerRoute(
-            Processor<? extends RouteOutcome<?>> processor,
-            Class<? extends RouteOutcome<?>> routeInterface,
-            RouteConfig config,
-            String processorName,
-            RouteOutcomeRegistry registry) throws Exception {
-        registerRoute(processor, routeInterface, config, processorName, registry, Map.of(), Map.of());
-    }
+        Processor<? extends RouteOutcome<?>> processor,
+        Class<? extends RouteOutcome<?>> routeInterface,
+        RouteConfig config,
+        String processorName,
+        RouteOutcomeRegistry registry) throws Exception {
+    registerRoute(processor, routeInterface, config, processorName,
+            new GuanacoRuntimeContext(registry, Map.of(), Map.of()));
+}
 
     protected void registerRoute(
             Processor<? extends RouteOutcome<?>> processor,
@@ -49,8 +50,18 @@ public abstract class GuanacoRouteBuilderTestSupport {
             RouteOutcomeRegistry registry,
             Map<String, AggregationStrategy> aggregationStrategies,
             Map<String, GuanacoDelayStrategy> delayStrategies) throws Exception {
+        registerRoute(processor, routeInterface, config, processorName,
+                new GuanacoRuntimeContext(registry, aggregationStrategies, delayStrategies));
+    }
+
+    protected void registerRoute(
+            Processor<? extends RouteOutcome<?>> processor,
+            Class<? extends RouteOutcome<?>> routeInterface,
+            RouteConfig config,
+            String processorName,
+            GuanacoRuntimeContext runtimeContext) throws Exception {
         context.addRoutes(new GuanacoRouteBuilder(
-                processor, routeInterface, config, processorName, registry, aggregationStrategies, delayStrategies));
+                processor, routeInterface, config, processorName, runtimeContext));
     }
 
     protected void registerRoute(
@@ -58,7 +69,8 @@ public abstract class GuanacoRouteBuilderTestSupport {
             RouteConfig config,
             String processorName,
             RouteOutcomeRegistry registry) throws Exception {
-        registerRoute(processor, ROUTE_OUTCOME_CLASS, config, processorName, registry, Map.of(), Map.of());
+        registerRoute(processor, ROUTE_OUTCOME_CLASS, config, processorName,
+                new GuanacoRuntimeContext(registry, Map.of(), Map.of()));
     }
 
     /**
