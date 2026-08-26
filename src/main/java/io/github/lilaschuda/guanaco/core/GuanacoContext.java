@@ -225,8 +225,4 @@ public class GuanacoContext extends SpringCamelContext {
         log.info("Registered GuanacoDelayStrategy '{}'", name);
     }
     
-    public Map<String, GuanacoDelayStrategy> getDelayStrategies(){
-        return delayStrategies;
-    }
-    
 }

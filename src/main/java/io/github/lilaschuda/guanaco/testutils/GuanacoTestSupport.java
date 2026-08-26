@@ -82,11 +82,12 @@ public final class GuanacoTestSupport {
                 return config;
             }
         };
+
         ApplicationContext ctx = new StaticApplicationContext();
         context.setApplicationContext(ctx);
-        delayStrategies.forEach((k,v) -> {
-            context.getDelayStrategies().put(k, v);
-        });
+
+        delayStrategies.forEach(context::registerDelayStrategy);
+
         context.wireRoutes();
         context.start();
         return new GuanacoRuntimeEnvironment(context);

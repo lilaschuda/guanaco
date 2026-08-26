@@ -431,24 +431,17 @@ public class GuanacoRouteBuilder extends RouteBuilder {
                 log.info("[{}] Bound {} → {} (delayed)", processorName, outcomeName, target.getUri());
                 parent = applyDelay(parent, delayer);
             }
-            
+
             if (cb != null) {
                 log.info("[{}] Bound {} → {} (circuit breaker enabled)", processorName, outcomeName, target.getUri());
                 GuanacoResilienceHelper.applyCircuitBreaker(parent, target.getUri(), cb);
-            } else if (throttler != null) {
-                // Throttle applied but no circuit breaker — the throttle
-                // definition itself needs a plain .to(uri) child.
-                ((ThrottleDefinition) parent).to(target.getUri());
             } else {
-                // Neither policy applies — plain, unwrapped dispatch.
-                // FIX: was incorrectly calling branch.when(...) a second time
-                // here; should just be a plain .to() on the branch itself.
                 log.info("[{}] Bound {} → {}", processorName, outcomeName, target.getUri());
-                branch.to(target.getUri());
+                attachPlainTo(parent, target.getUri());
             }
         } else {
             // Multicast case — multiple static endpoints for one outcome.
-            // Unrelated to the throttler/circuit-breaker logic above; unchanged.
+            // Unrelated to the throttler/circuit-breaker/delayer logic above; unchanged.
             List<String> uris = targets.stream().map(BindingTarget::getUri).toList();
             choice.when(exchange -> outcomeClass.isInstance(exchange.getProperty(OUTCOME_PROPERTY)))
                     .multicast()
@@ -457,7 +450,6 @@ public class GuanacoRouteBuilder extends RouteBuilder {
             log.info("[{}] Bound {} → Multicast {}", processorName, outcomeName, uris);
         }
     }
-
     private Class<?> resolveOutcomeClass(String outcomeName) {
         Class<?>[] permitted = routeInterface.getPermittedSubclasses();
 
@@ -534,7 +526,7 @@ public class GuanacoRouteBuilder extends RouteBuilder {
         if (delayerConfig.getDelayStrategyRef() != null) {
             GuanacoDelayStrategy strategy = delayStrategies.get(delayerConfig.getDelayStrategyRef());
             if (strategy == null) {
-                throw new GuanacoInspectionException(
+                throw new GuanacoRouteBuilderException(
                         "[" + processorName + "] delayer.delayStrategyRef '" + delayerConfig.getDelayStrategyRef()
                         + "' was not found among registered GuanacoDelayStrategy instances. Register it via "
                         + "GuanacoContext.registerDelayStrategy(\"" + delayerConfig.getDelayStrategyRef()

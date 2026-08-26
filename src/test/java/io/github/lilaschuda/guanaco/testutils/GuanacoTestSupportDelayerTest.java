@@ -3,7 +3,7 @@ package io.github.lilaschuda.guanaco.testutils;
 import io.github.lilaschuda.guanaco.config.BindingTarget;
 import io.github.lilaschuda.guanaco.config.GuanacoDelayerConfig;
 import io.github.lilaschuda.guanaco.core.GuanacoDelayStrategy;
-import io.github.lilaschuda.guanaco.core.GuanacoInspectionException;
+import io.github.lilaschuda.guanaco.core.GuanacoRouteBuilderException;
 import org.apache.camel.Exchange;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.junit.jupiter.api.AfterEach;
@@ -127,7 +127,7 @@ class GuanacoTestSupportDelayerTest {
         // wireRoutes() calls addRoutes(builder), which runs configure()
         // synchronously — same point Aggregate's equivalent test asserts on.
         assertThatThrownBy(support::start)
-                .isInstanceOf(GuanacoInspectionException.class)
+                .isInstanceOf(GuanacoRouteBuilderException.class)
                 .hasMessageContaining("doesNotExist");
     }
 

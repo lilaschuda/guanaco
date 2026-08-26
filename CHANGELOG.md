@@ -4,6 +4,15 @@ All notable changes to Guanaco are documented here. Pre-1.0 versions are
 `-SNAPSHOT` and not published as tagged releases — v1.0.0 will be the first
 tagged release. Version numbers still advance one subversion per completed
 set of features, so the commit history stays easy to follow.
+## [0.8.0]
+### Fixed(core): resolve delayer dispatch wiring, unify strategy exceptions, and secure context encapsulation
+
+- Fix delayer-only binding wiring by delegating dispatch directly to attachPlainTo, 
+  ensuring standalone delay blocks nest correctly instead of creating dangling routes.
+- Consolidate missing strategy reference exceptions on GuanacoRouteBuilderException 
+  for consistent route-building error handling.
+- Eliminate encapsulation leak in GuanacoContext by removing getDelayStrategies() 
+  and updating GuanacoTestSupport to use registerDelayStrategy(...).
 
 ## [0.7.0]
 
