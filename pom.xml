@@ -47,7 +47,8 @@
         <camel.version>4.20.0</camel.version>
         <jackson.version>2.17.0</jackson.version>
         <junit.version>5.10.2</junit.version>
-        <log4j2-version>2.22.1</log4j2-version>
+        <log4j2.version>2.22.1</log4j2.version>
+        <spring.version>7.0.7</spring.version>
     </properties>
 
     <dependencies>
@@ -62,11 +63,10 @@
             <artifactId>camel-main</artifactId>
             <version>${camel.version}</version>
         </dependency>
-
-	<dependency>
-	    <groupId>org.apache.camel</groupId>
-	    <artifactId>camel-resilience4j</artifactId>
-	    <version>${camel.version}</version>
+        <dependency>
+            <groupId>org.apache.camel</groupId>
+            <artifactId>camel-resilience4j</artifactId>
+            <version>${camel.version}</version>
             <scope>compile</scope>
         </dependency>
 
@@ -93,12 +93,12 @@
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-slf4j2-impl</artifactId>
-            <version>${log4j2-version}</version>
+            <version>${log4j2.version}</version>
         </dependency>
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-core</artifactId>
-            <version>${log4j2-version}</version>
+            <version>${log4j2.version}</version>
         </dependency>
 
         <!-- Test -->
@@ -117,19 +117,19 @@
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
-            <version>3.25.3</version>
+            <version>3.27.7</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-context</artifactId>
-	    <version>7.0.7</version>
+            <version>${spring.version}</version>
             <type>jar</type>
         </dependency>
         <dependency>
             <groupId>org.apache.camel</groupId>
             <artifactId>camel-spring-xml</artifactId>
-	    <version>${camel.version}</version>
+            <version>${camel.version}</version>
             <type>jar</type>
         </dependency>
         <dependency>
@@ -140,7 +140,7 @@
         <dependency>
             <groupId>org.apache.camel</groupId>
             <artifactId>camel-support</artifactId>
-            <version>4.20.0</version>
+            <version>${camel.version}</version>
             <type>jar</type>
         </dependency>
         <dependency>
@@ -167,18 +167,18 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
-	    </plugin>
+            </plugin>
             <plugin>
-    		<groupId>org.apache.maven.plugins</groupId>
-    		<artifactId>maven-javadoc-plugin</artifactId>
-    		<version>3.6.3</version>
-		<configuration>
-	            <doclint>all</doclint>
-        	    <source>21</source>
-        	    <show>protected</show>
-        	    <nohelp>true</nohelp>
-    		</configuration>
-	    </plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.6.3</version>
+                <configuration>
+                    <doclint>all</doclint>
+                    <source>21</source>
+                    <show>protected</show>
+                    <nohelp>true</nohelp>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 </project>
