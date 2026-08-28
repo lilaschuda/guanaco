@@ -8,10 +8,17 @@ package io.github.lilaschuda.guanaco.context.exception;
  * structurally incomplete configuration block.
  */
 public class InvalidRouteConfigurationException extends RuntimeException {
-    /** @param message description of the structural configuration defect */
+
+    /**
+     * Constructs a new exception with the specified detail message.
+     *
+     * @param message description of the structural configuration defect
+     */
     public InvalidRouteConfigurationException(String message) { super(message); }
 
     /**
+     * Constructs a new exception with the specified detail message and cause.
+     *
      * @param message description of the structural configuration defect
      * @param cause the underlying cause, if any
      */

@@ -42,49 +42,130 @@ public class RouteConfig {
     /** Default constructor for Jackson deserialization. */
     public RouteConfig() { }
 
-    /** @return the Camel {@code from} endpoint URI for this route */
+    /**
+     * Gets the Camel {@code from} endpoint URI for this route.
+     *
+     * @return the Camel {@code from} endpoint URI for this route
+     */
     public String getFrom() { return from; }
-    /** @param from the Camel {@code from} endpoint URI for this route */
+
+    /**
+     * Sets the Camel {@code from} endpoint URI for this route.
+     *
+     * @param from the Camel {@code from} endpoint URI for this route
+     */
     public void setFrom(String from) { this.from = from; }
 
-    /** @return the outcome-simple-class-name to binding-target mapping for this route */
+    /**
+     * Gets the outcome-simple-class-name to binding-target mapping for this route.
+     *
+     * @return the outcome-simple-class-name to binding-target mapping for this route
+     */
     public Map<String, List<BindingTarget>> getBindings() { return bindings; }
-    /** @param bindings the outcome-simple-class-name to binding-target mapping for this route */
+
+    /**
+     * Sets the outcome-simple-class-name to binding-target mapping for this route.
+     *
+     * @param bindings the outcome-simple-class-name to binding-target mapping for this route
+     */
     public void setBindings(Map<String, List<BindingTarget>> bindings) { this.bindings = bindings; }
 
-    /** @return this route's dead-letter/retry policy, or {@code null} if none is configured */
+    /**
+     * Gets this route's dead-letter/retry policy.
+     *
+     * @return this route's dead-letter/retry policy, or {@code null} if none is configured
+     */
     public ErrorHandlerConfig getErrorHandler() { return errorHandler; }
-    /** @param errorHandler this route's dead-letter/retry policy */
+
+    /**
+     * Sets this route's dead-letter/retry policy.
+     *
+     * @param errorHandler this route's dead-letter/retry policy
+     */
     public void setErrorHandler(ErrorHandlerConfig errorHandler) { this.errorHandler = errorHandler; }
 
-    /** @return this route's aggregation configuration, or {@code null} if aggregation isn't used */
+    /**
+     * Gets this route's aggregation configuration.
+     *
+     * @return this route's aggregation configuration, or {@code null} if aggregation isn't used
+     */
     public GuanacoAggregateConfig getAggregate() { return aggregate; }
-    /** @param aggregate this route's aggregation configuration */
+
+    /**
+     * Sets this route's aggregation configuration.
+     *
+     * @param aggregate this route's aggregation configuration
+     */
     public void setAggregate(GuanacoAggregateConfig aggregate) { this.aggregate = aggregate; }
 
-    /** @return this route's idempotent-consumer configuration, or {@code null} if not used */
+    /**
+     * Gets this route's idempotent-consumer configuration.
+     *
+     * @return this route's idempotent-consumer configuration, or {@code null} if not used
+     */
     public GuanacoIdempotentConfig getIdempotent() { return idempotent; }
-    /** @param idempotent this route's idempotent-consumer configuration */
+
+    /**
+     * Sets this route's idempotent-consumer configuration.
+     *
+     * @param idempotent this route's idempotent-consumer configuration
+     */
     public void setIdempotent(GuanacoIdempotentConfig idempotent) { this.idempotent = idempotent; }
 
-    /** @return this route's resequencing configuration, or {@code null} if not used */
+    /**
+     * Gets this route's resequencing configuration.
+     *
+     * @return this route's resequencing configuration, or {@code null} if not used
+     */
     public GuanacoResequenceConfig getResequence() { return resequence; }
-    /** @param resequence this route's resequencing configuration */
+
+    /**
+     * Sets this route's resequencing configuration.
+     *
+     * @param resequence this route's resequencing configuration
+     */
     public void setResequence(GuanacoResequenceConfig resequence) { this.resequence = resequence; }
 
-    /** @return this route's default circuit breaker policy, or {@code null} if none is configured */
+    /**
+     * Gets this route's default circuit breaker policy.
+     *
+     * @return this route's default circuit breaker policy, or {@code null} if none is configured
+     */
     public GuanacoCircuitBreakerConfig getCircuitBreaker() { return circuitBreaker; }
-    /** @param circuitBreaker this route's default circuit breaker policy */
+
+    /**
+     * Sets this route's default circuit breaker policy.
+     *
+     * @param circuitBreaker this route's default circuit breaker policy
+     */
     public void setCircuitBreaker(GuanacoCircuitBreakerConfig circuitBreaker) { this.circuitBreaker = circuitBreaker; }
 
-    /** @return this route's default throttler policy, or {@code null} if none is configured */
+    /**
+     * Gets this route's default throttler policy.
+     *
+     * @return this route's default throttler policy, or {@code null} if none is configured
+     */
     public GuanacoThrottlerConfig getThrottler() { return throttler; }
-    /** @param throttler this route's default throttler policy */
+
+    /**
+     * Sets this route's default throttler policy.
+     *
+     * @param throttler this route's default throttler policy
+     */
     public void setThrottler(GuanacoThrottlerConfig throttler) { this.throttler = throttler; }
 
-    /** @return this route's default delayer policy, or {@code null} if none is configured */
+    /**
+     * Gets this route's default delayer policy.
+     *
+     * @return this route's default delayer policy, or {@code null} if none is configured
+     */
     public GuanacoDelayerConfig getDelayer() { return delayer; }
-    /** @param delayer this route's default delayer policy */
+
+    /**
+     * Sets this route's default delayer policy.
+     *
+     * @param delayer this route's default delayer policy
+     */
     public void setDelayer(GuanacoDelayerConfig delayer) { this.delayer = delayer; }
 
     /**
@@ -156,14 +237,32 @@ public class RouteConfig {
         /** Default constructor for Jackson deserialization. */
         public ErrorHandlerConfig() { }
 
-        /** @return the dead-letter destination URI */
+        /**
+         * Gets the dead-letter destination URI.
+         *
+         * @return the dead-letter destination URI
+         */
         public String getDeadLetter() { return deadLetter; }
-        /** @param deadLetter the dead-letter destination URI */
+
+        /**
+         * Sets the dead-letter destination URI.
+         *
+         * @param deadLetter the dead-letter destination URI
+         */
         public void setDeadLetter(String deadLetter) { this.deadLetter = deadLetter; }
 
-        /** @return the number of retries before sending to the dead letter; defaults to {@code 0} */
+        /**
+         * Gets the number of retries before sending to the dead letter.
+         *
+         * @return the number of retries before sending to the dead letter; defaults to {@code 0}
+         */
         public int getMaxRetries() { return maxRetries; }
-        /** @param maxRetries the number of retries before sending to the dead letter */
+
+        /**
+         * Sets the number of retries before sending to the dead letter.
+         *
+         * @param maxRetries the number of retries before sending to the dead letter
+         */
         public void setMaxRetries(int maxRetries) { this.maxRetries = maxRetries; }
     }
 }

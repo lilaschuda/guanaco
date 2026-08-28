@@ -20,6 +20,10 @@ import java.util.Map;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.StaticApplicationContext;
 
+/**
+ * Fluent test utility for bootstrapping isolated Guanaco runtime environments
+ * with virtual route configurations, mock bindings, and registered strategies.
+ */
 public final class GuanacoTestSupport {
 
     private final String basePackage;
@@ -38,10 +42,21 @@ public final class GuanacoTestSupport {
 
     private GuanacoContext context;
 
+    /**
+     * Constructs a test support builder for the specified package path.
+     *
+     * @param basePackage package path to scan for Guanaco processor components
+     */
     public GuanacoTestSupport(String basePackage) {
         this.basePackage = basePackage;
     }
 
+    /**
+     * Configures the validation mode for the test environment.
+     *
+     * @param mode the validation mode to apply (e.g., {@code STRICT} or {@code PERMISSIVE})
+     * @return this GuanacoTestSupport builder instance
+     */
     public GuanacoTestSupport withValidation(ValidationMode mode) {
         this.validationMode = mode;
         return this;
@@ -113,6 +128,14 @@ public final class GuanacoTestSupport {
         return this;
     }
 
+    /**
+     * Registers a virtual route configuration with the given processor name, entry URI, and outcome bindings.
+     *
+     * @param processorName target processor class/bean name
+     * @param fromUri Camel {@code from} endpoint URI
+     * @param bindings mapping of outcome class names to lists of target bindings
+     * @return this GuanacoTestSupport builder instance
+     */
     public GuanacoTestSupport route(String processorName, String fromUri, Map<String, List<BindingTarget>> bindings) {
         RouteConfig routeConfig = new RouteConfig();
         routeConfig.setFrom(fromUri);
@@ -141,6 +164,13 @@ public final class GuanacoTestSupport {
         return this;
     }
 
+    /**
+     * Registers a custom delay strategy under the specified name.
+     *
+     * @param name unique identifier for the delay strategy
+     * @param strategy strategy implementation instance
+     * @return this GuanacoTestSupport builder instance
+     */
     public GuanacoTestSupport registerDelayStrategy(String name, GuanacoDelayStrategy strategy) {
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("GuanacoDelayStrategy name must be provided and non-blank.");
@@ -159,6 +189,13 @@ public final class GuanacoTestSupport {
         return this;
     }
 
+    /**
+     * Registers a custom Camel aggregation strategy under the specified name.
+     *
+     * @param name unique identifier for the aggregation strategy
+     * @param strategy aggregation strategy implementation instance
+     * @return this GuanacoTestSupport builder instance
+     */
     public GuanacoTestSupport registerAggregationStrategy(String name, AggregationStrategy strategy) {
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("AggregationStrategy name must be provided and non-blank.");
@@ -177,6 +214,12 @@ public final class GuanacoTestSupport {
         return this;
     }
 
+    /**
+     * Initializes and starts the Guanaco runtime environment with all registered virtual routes and strategies.
+     *
+     * @return active runtime environment wrapping the started context
+     * @throws Exception if context creation or lifecycle startup fails
+     */
     public GuanacoRuntimeEnvironment start() throws Exception {
         this.context = new GuanacoContext(basePackage) {
             @Override

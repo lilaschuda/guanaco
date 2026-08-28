@@ -6,7 +6,11 @@ package io.github.lilaschuda.guanaco.config.exception;
  */
 public class UnsupportedConfigFormatException extends GuanacoConfigException {
 
-    /** @param message description of the unrecognized file extension */
+    /**
+     * Constructs a new exception with the specified detail message.
+     *
+     * @param message description of the unrecognized file extension
+     */
     public UnsupportedConfigFormatException(String message) {
         super(message);
     }
