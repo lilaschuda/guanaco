@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.config;
 
+import io.github.lilaschuda.guanaco.config.exception.GuanacoConfigException;
+import io.github.lilaschuda.guanaco.config.exception.UnsupportedConfigFormatException;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

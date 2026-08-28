@@ -33,22 +33,82 @@ public class GuanacoDelayerConfig {
     private String delayStrategyRef;
     private Boolean asyncDelayed;
 
+    /** Default constructor, used by Jackson when deserializing a delayer block. */
+    public GuanacoDelayerConfig() { }
+
+    /**
+     * Gets the explicitly configured enabled state.
+     *
+     * @return the explicitly configured enabled state, or {@code null} if not set
+     */
     public Boolean getEnabled() { return enabled; }
+
+    /**
+     * Sets whether this delay policy is active.
+     *
+     * @param enabled whether this delay policy is active
+     */
     public void setEnabled(Boolean enabled) { this.enabled = enabled; }
 
+    /**
+     * Resolves the effective enabled state.
+     *
+     * @return the effective enabled state — {@code true} unless explicitly set to
+     *         {@code false}, so an absent {@code enabled} field means "on."
+     */
     public boolean resolveEnabled() {
         return enabled == null || enabled;
     }
 
+    /**
+     * Gets the fixed delay in milliseconds.
+     *
+     * @return the fixed delay in milliseconds, or {@code null} if a {@code delayStrategyRef} is used instead
+     */
     public Long getDelayMs() { return delayMs; }
+
+    /**
+     * Sets the fixed delay in milliseconds.
+     *
+     * @param delayMs the fixed delay in milliseconds
+     */
     public void setDelayMs(Long delayMs) { this.delayMs = delayMs; }
 
+    /**
+     * Gets the name of the registered delay strategy.
+     *
+     * @return the name of the registered {@link io.github.lilaschuda.guanaco.api.GuanacoDelayStrategy}
+     *         to compute the delay with, or {@code null} if a fixed {@code delayMs} is used instead
+     */
     public String getDelayStrategyRef() { return delayStrategyRef; }
+
+    /**
+     * Sets the name of the registered delay strategy.
+     *
+     * @param delayStrategyRef the name of the registered delay strategy to compute the delay with
+     */
     public void setDelayStrategyRef(String delayStrategyRef) { this.delayStrategyRef = delayStrategyRef; }
 
+    /**
+     * Gets the explicitly configured async-delayed state.
+     *
+     * @return the explicitly configured async-delayed state, or {@code null} if not set
+     */
     public Boolean getAsyncDelayed() { return asyncDelayed; }
+
+    /**
+     * Sets whether the delay should be non-blocking.
+     *
+     * @param asyncDelayed whether the delay should be non-blocking
+     */
     public void setAsyncDelayed(Boolean asyncDelayed) { this.asyncDelayed = asyncDelayed; }
 
+    /**
+     * Resolves the effective async-delayed state.
+     *
+     * @return the effective async-delayed state — {@code false} (blocking) unless
+     *         explicitly set to {@code true}, matching Camel's own native default.
+     */
     public boolean resolveAsyncDelayed() {
         return asyncDelayed != null && asyncDelayed;
     }

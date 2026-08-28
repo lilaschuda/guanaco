@@ -31,10 +31,19 @@ package io.github.lilaschuda.guanaco.config;
  */
 public class GuanacoResequenceConfig {
 
-    public enum Mode { STREAM, BATCH }
+    /** Resequencing strategy: unbounded, timeout-driven ({@link #STREAM}), or fixed-size batches ({@link #BATCH}). */
+    public enum Mode {
+        /** Unbounded stream resequencing, driven by {@code capacity}/{@code timeoutMs}/{@code rejectOld}. */
+        STREAM,
+        /** Fixed-size batch resequencing, requiring at least one of {@code capacity}/{@code timeoutMs}. */
+        BATCH
+    }
 
+    /** Default STREAM-mode capacity, used when {@code capacity} is not set. */
     public static final int DEFAULT_STREAM_CAPACITY = 1000;
+    /** Default STREAM-mode timeout in milliseconds, used when {@code timeoutMs} is not set. */
     public static final long DEFAULT_STREAM_TIMEOUT_MS = 1000L;
+    /** Default STREAM-mode {@code rejectOld} setting, used when {@code rejectOld} is not set. */
     public static final boolean DEFAULT_REJECT_OLD = true;
 
     private String sequenceHeader;
@@ -43,32 +52,103 @@ public class GuanacoResequenceConfig {
     private Long timeoutMs;
     private Boolean rejectOld;
 
+    /** Default constructor, used by Jackson when deserializing a resequence block. */
+    public GuanacoResequenceConfig() { }
+
+    /**
+     * Gets the header used to determine message sequence order.
+     *
+     * @return the header used to determine message sequence order
+     */
     public String getSequenceHeader() { return sequenceHeader; }
+
+    /**
+     * Sets the header used to determine message sequence order.
+     *
+     * @param sequenceHeader the header used to determine message sequence order
+     */
     public void setSequenceHeader(String sequenceHeader) { this.sequenceHeader = sequenceHeader; }
 
+    /**
+     * Gets the resequencing mode.
+     *
+     * @return the resequencing mode
+     */
     public Mode getMode() { return mode; }
+
+    /**
+     * Sets the resequencing mode.
+     *
+     * @param mode the resequencing mode
+     */
     public void setMode(Mode mode) { this.mode = mode; }
 
+    /**
+     * Gets the resequencer's buffer capacity.
+     *
+     * @return the explicitly configured capacity, or {@code null} if not set
+     */
     public Integer getCapacity() { return capacity; }
+
+    /**
+     * Sets the resequencer's buffer capacity.
+     *
+     * @param capacity the resequencer's buffer capacity
+     */
     public void setCapacity(Integer capacity) { this.capacity = capacity; }
 
+    /**
+     * Gets the resequencer's timeout in milliseconds.
+     *
+     * @return the explicitly configured timeout in milliseconds, or {@code null} if not set
+     */
     public Long getTimeoutMs() { return timeoutMs; }
+
+    /**
+     * Sets the resequencer's timeout in milliseconds.
+     *
+     * @param timeoutMs the resequencer's timeout in milliseconds
+     */
     public void setTimeoutMs(Long timeoutMs) { this.timeoutMs = timeoutMs; }
 
+    /**
+     * Gets whether out-of-sequence-and-too-old messages are rejected.
+     *
+     * @return the explicitly configured reject-old state, or {@code null} if not set; STREAM mode only
+     */
     public Boolean getRejectOld() { return rejectOld; }
+
+    /**
+     * Sets whether out-of-sequence-and-too-old messages are rejected.
+     *
+     * @param rejectOld whether out-of-sequence-and-too-old messages are rejected; STREAM mode only
+     */
     public void setRejectOld(Boolean rejectOld) { this.rejectOld = rejectOld; }
 
-    /** STREAM mode only — BATCH mode always uses whatever capacity/timeoutMs is explicitly set. */
+    /**
+     * STREAM mode only — BATCH mode always uses whatever capacity/timeoutMs is explicitly set.
+     *
+     * @return the effective STREAM capacity, falling back to {@link #DEFAULT_STREAM_CAPACITY} if unset
+     */
     public int resolveStreamCapacity() {
         return capacity != null ? capacity : DEFAULT_STREAM_CAPACITY;
     }
 
-    /** STREAM mode only. */
+    /**
+     * STREAM mode only.
+     *
+     * @return the effective STREAM timeout in milliseconds, falling back to
+     *         {@link #DEFAULT_STREAM_TIMEOUT_MS} if unset
+     */
     public long resolveStreamTimeoutMs() {
         return timeoutMs != null ? timeoutMs : DEFAULT_STREAM_TIMEOUT_MS;
     }
 
-    /** STREAM mode only. */
+    /**
+     * STREAM mode only.
+     *
+     * @return the effective reject-old state, falling back to {@link #DEFAULT_REJECT_OLD} if unset
+     */
     public boolean resolveRejectOld() {
         return rejectOld != null ? rejectOld : DEFAULT_REJECT_OLD;
     }

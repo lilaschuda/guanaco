@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.config;
 
+import io.github.lilaschuda.guanaco.config.exception.GuanacoConfigException;
+import io.github.lilaschuda.guanaco.config.exception.UnsupportedConfigFormatException;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -38,6 +40,7 @@ public class ConfigLoader {
     private final ObjectMapper yamlMapper;
     private final ObjectMapper jsonMapper;
 
+    /** Creates a loader with strict-duplicate-key-detecting YAML and JSON mappers. */
     public ConfigLoader() {
         this.yamlMapper = newStrictMapper(new YAMLFactory());
         this.jsonMapper = newStrictMapper(new JsonFactory());
@@ -56,6 +59,8 @@ public class ConfigLoader {
      * Load from the default classpath location, auto-detecting format by
      * trying {@code routes.json}, {@code routes.yaml}, then {@code routes.yml}
      * in that order. JSON takes precedence if present.
+     *
+     * @return the loaded configuration
      */
     public GuanacoConfig load() {
         return loadDefault(DEFAULT_BASE_NAME);
@@ -65,6 +70,9 @@ public class ConfigLoader {
      * Package-private so tests can point default-resolution at an isolated
      * classpath subdirectory, rather than the shared root resources used by
      * other tests' routes.yaml fixture.
+     *
+     * @param baseName the base configuration file name without extension
+     * @return the loaded configuration
      */
     GuanacoConfig loadDefault(String baseName) {
         String jsonPath = baseName + ".json";
@@ -99,6 +107,9 @@ public class ConfigLoader {
     /**
      * Load from a specific classpath resource path. Format is inferred from
      * the resource's file extension.
+     *
+     * @param classpathResource the classpath-relative path to the configuration file
+     * @return the loaded configuration
      */
     public GuanacoConfig load(String classpathResource) {
         ObjectMapper mapper = resolveMapper(classpathResource);

@@ -1,8 +1,8 @@
 package io.github.lilaschuda.guanaco.testutils.fixtures;
 
-import io.github.lilaschuda.guanaco.annotation.GuanacoRoute;
-import io.github.lilaschuda.guanaco.core.RouteOutcome;
-import io.github.lilaschuda.guanaco.dsl.Processor;
+import io.github.lilaschuda.guanaco.api.GuanacoRoute;
+import io.github.lilaschuda.guanaco.api.RouteOutcome;
+import io.github.lilaschuda.guanaco.api.Processor;
 import org.apache.camel.Exchange;
 
 @GuanacoRoute

@@ -2,8 +2,8 @@ package io.github.lilaschuda.guanaco.testutils;
 
 import io.github.lilaschuda.guanaco.config.BindingTarget;
 import io.github.lilaschuda.guanaco.config.GuanacoDelayerConfig;
-import io.github.lilaschuda.guanaco.core.GuanacoDelayStrategy;
-import io.github.lilaschuda.guanaco.core.GuanacoRouteBuilderException;
+import io.github.lilaschuda.guanaco.api.GuanacoDelayStrategy;
+import io.github.lilaschuda.guanaco.context.exception.GuanacoRouteBuilderException;
 import org.apache.camel.Exchange;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.junit.jupiter.api.AfterEach;

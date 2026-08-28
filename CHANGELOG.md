@@ -5,6 +5,21 @@ All notable changes to Guanaco are documented here. Pre-1.0 versions are
 tagged release. Version numbers still advance one subversion per completed
 set of features, so the commit history stays easy to follow.
 
+## [0.10.0]
+
+### Changed
+- **Public API Separation**: Re-architected the package structure to expose 
+  explicit developer-facing interfaces under `io.github.lilaschuda.guanaco.api`,
+  establishing a clean boundary between framework extensions and core runtime internals.
+- **Access Tightening**: Reduced class visibility of internal helpers, route builders
+  and pipeline infrastructure to package-private to prevent unintended coupling and misuse.
+
+### Documentation
+- **Javadoc Overhaul**: Added missing descriptions, parameter tags (`@param`), return tags (`@return`)
+   and constructor documentation across all core packages (`config`, `context.exception`, `testutils`).
+- **DocLint Compliance**: Resolved 100+ build-time Javadoc warnings, achieving a 
+  completely clean compilation output under JDK strict inspection mode.
+
 ## [0.9.0]
 
 A review-and-refactor pass, no new EIPs — closing structural debt that had

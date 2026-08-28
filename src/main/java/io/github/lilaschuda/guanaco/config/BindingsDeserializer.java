@@ -1,5 +1,6 @@
 package io.github.lilaschuda.guanaco.config;
 
+import io.github.lilaschuda.guanaco.config.exception.GuanacoConfigException;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonDeserializer;
@@ -13,12 +14,23 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Normalizes the 'bindings' block into Map<String, List<BindingTarget>>.
+ * Normalizes the 'bindings' block into {@code Map<String, List<BindingTarget>>}.
  * Each outcome key accepts, singly or as a list: a plain URI string, or a
  * rich object with 'uri' and an optional 'circuitBreaker'.
  */
 public class BindingsDeserializer extends JsonDeserializer<Map<String, List<BindingTarget>>> {
 
+    /** Default constructor, used by Jackson when instantiating this deserializer. */
+    public BindingsDeserializer() { }
+
+    /**
+     * Deserializes the JSON/YAML bindings block into outcome-to-target mapping.
+     *
+     * @param p the Jackson JSON parser
+     * @param ctxt the deserialization context
+     * @return a map of outcome names to lists of binding targets
+     * @throws IOException if an I/O error occurs during parsing
+     */
     @Override
     public Map<String, List<BindingTarget>> deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
         ObjectMapper mapper = (ObjectMapper) p.getCodec();

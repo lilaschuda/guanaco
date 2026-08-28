@@ -10,8 +10,8 @@ import io.github.lilaschuda.guanaco.config.GuanacoIdempotentConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoResequenceConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoThrottlerConfig;
 import io.github.lilaschuda.guanaco.config.RouteConfig;
-import io.github.lilaschuda.guanaco.core.GuanacoContext;
-import io.github.lilaschuda.guanaco.core.GuanacoDelayStrategy;
+import io.github.lilaschuda.guanaco.context.GuanacoContext;
+import io.github.lilaschuda.guanaco.api.GuanacoDelayStrategy;
 import org.apache.camel.AggregationStrategy;
 
 import java.util.HashMap;
@@ -47,37 +47,67 @@ public final class GuanacoTestSupport {
         return this;
     }
 
-    /** Route-level throttler default — applied to the next .route(...) call, then cleared. */
+    /**
+     * Sets the route-level throttler default applied to the next {@code .route(...)} call and then cleared.
+     *
+     * @param throttler the throttler configuration to apply
+     * @return this GuanacoTestSupport builder instance
+     */
     public GuanacoTestSupport withRouteThrottler(GuanacoThrottlerConfig throttler) {
         this.routeThrottler = throttler;
         return this;
     }
 
-    /** Route-level circuit breaker default — applied to the next .route(...) call, then cleared. */
+    /**
+     * Sets the route-level circuit breaker default applied to the next {@code .route(...)} call and then cleared.
+     *
+     * @param cb the circuit breaker configuration to apply
+     * @return this GuanacoTestSupport builder instance
+     */
     public GuanacoTestSupport withRouteCircuitBreaker(GuanacoCircuitBreakerConfig cb) {
         this.routeCircuitBreaker = cb;
         return this;
     }
 
-    /** Route-level delayer default — applied to the next .route(...) call, then cleared. */
+    /**
+     * Sets the route-level delayer default applied to the next {@code .route(...)} call and then cleared.
+     *
+     * @param delayer the delayer configuration to apply
+     * @return this GuanacoTestSupport builder instance
+     */
     public GuanacoTestSupport withRouteDelayer(GuanacoDelayerConfig delayer) {
         this.routeDelayer = delayer;
         return this;
     }
 
-    /** Aggregate config for the next .route(...) call, then cleared. */
+    /**
+     * Sets the aggregate config applied to the next {@code .route(...)} call and then cleared.
+     *
+     * @param aggregate the aggregate configuration to apply
+     * @return this GuanacoTestSupport builder instance
+     */
     public GuanacoTestSupport withRouteAggregate(GuanacoAggregateConfig aggregate) {
         this.routeAggregate = aggregate;
         return this;
     }
 
-    /** Idempotent config for the next .route(...) call, then cleared. */
+    /**
+     * Sets the idempotent config applied to the next {@code .route(...)} call and then cleared.
+     *
+     * @param idempotent the idempotent configuration to apply
+     * @return this GuanacoTestSupport builder instance
+     */
     public GuanacoTestSupport withRouteIdempotent(GuanacoIdempotentConfig idempotent) {
         this.routeIdempotent = idempotent;
         return this;
     }
 
-    /** Resequence config for the next .route(...) call, then cleared. */
+    /**
+     * Sets the resequence config applied to the next {@code .route(...)} call and then cleared.
+     *
+     * @param resequence the resequence configuration to apply
+     * @return this GuanacoTestSupport builder instance
+     */
     public GuanacoTestSupport withRouteResequence(GuanacoResequenceConfig resequence) {
         this.routeResequence = resequence;
         return this;

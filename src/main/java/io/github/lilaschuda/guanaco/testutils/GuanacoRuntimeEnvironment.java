@@ -1,6 +1,6 @@
 package io.github.lilaschuda.guanaco.testutils;
 
-import io.github.lilaschuda.guanaco.core.GuanacoContext;
+import io.github.lilaschuda.guanaco.context.GuanacoContext;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.component.mock.MockEndpoint;
 
@@ -16,17 +16,32 @@ public final class GuanacoRuntimeEnvironment {
     private GuanacoContext context;
     private final ProducerTemplate producer;
 
+    /**
+     * Constructs a GuanacoRuntimeEnvironment wrapping the specified GuanacoContext.
+     *
+     * @param context the context to wrap and execute test operations against
+     */
     public GuanacoRuntimeEnvironment(GuanacoContext context) {
         this.context = context;
         this.producer = context.createProducerTemplate();
     }
 
-    /** Looks up or provisions a standard mock endpoint for assertions. */
+    /**
+     * Looks up or provisions a standard mock endpoint for assertions.
+     *
+     * @param endpointUri the endpoint URI to convert to a mock endpoint
+     * @return the resolved MockEndpoint instance
+     */
     public MockEndpoint getMock(String endpointUri) {
         return context.getEndpoint(endpointUri, MockEndpoint.class);
     }
 
-    /** Sends a basic message body to the target endpoint. */
+    /**
+     * Sends a basic message body to the target endpoint.
+     *
+     * @param endpointUri the destination endpoint URI
+     * @param body the payload body to send
+     */
     public void send(String endpointUri, Object body) {
         producer.sendBody(endpointUri, body);
     }
@@ -34,6 +49,10 @@ public final class GuanacoRuntimeEnvironment {
     /** 
      * Sends a message body accompanied by a map of routing headers.
      * Uses wildcard tracking to prevent invariant generic compilation errors.
+     *
+     * @param endpointUri the destination endpoint URI
+     * @param body the payload body to send
+     * @param headers the message headers to attach
      */
     public void send(String endpointUri, Object body, Map<String, ?> headers) {
         // Camel's underlying engine expects Map<String, Object>
@@ -41,13 +60,24 @@ public final class GuanacoRuntimeEnvironment {
         producer.sendBodyAndHeaders(endpointUri, body, camelHeaders);
     }
 
+    /**
+     * Sets the application context.
+     *
+     * @param context the GuanacoContext to assign
+     */
     public void setApplicationContext(GuanacoContext context){
         this.context = context;
     }
     
+    /**
+     * Retrieves the application context.
+     *
+     * @return the active GuanacoContext
+     */
     public GuanacoContext getApplicationContext(){
         return this.context;
     }
+
     /** Gracefully tears down the testing context and messaging producers. */
     public void shutdown() {
         try {

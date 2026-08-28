@@ -23,15 +23,62 @@ public class GuanacoAggregateConfig {
     private Integer completionSize;
     private Long completionTimeoutMs;
 
+    /** Default constructor, used by Jackson when deserializing an aggregate block. */
+    public GuanacoAggregateConfig() { }
+
+    /**
+     * Gets the header used to correlate messages into the same aggregation group.
+     *
+     * @return the header used to correlate messages into the same aggregation group
+     */
     public String getCorrelationHeader() { return correlationHeader; }
+
+    /**
+     * Sets the header used to correlate messages into the same aggregation group.
+     *
+     * @param correlationHeader the header used to correlate messages into the same aggregation group
+     */
     public void setCorrelationHeader(String correlationHeader) { this.correlationHeader = correlationHeader; }
 
+    /**
+     * Gets the name of the registered aggregation strategy.
+     *
+     * @return the name of the registered {@link org.apache.camel.AggregationStrategy} to merge with
+     */
     public String getStrategyRef() { return strategyRef; }
+
+    /**
+     * Sets the name of the registered aggregation strategy.
+     *
+     * @param strategyRef the name of the registered {@link org.apache.camel.AggregationStrategy} to merge with
+     */
     public void setStrategyRef(String strategyRef) { this.strategyRef = strategyRef; }
 
+    /**
+     * Gets the message-count completion threshold.
+     *
+     * @return the message-count completion threshold, or {@code null} if not used
+     */
     public Integer getCompletionSize() { return completionSize; }
+
+    /**
+     * Sets the message-count completion threshold.
+     *
+     * @param completionSize the message-count completion threshold
+     */
     public void setCompletionSize(Integer completionSize) { this.completionSize = completionSize; }
 
+    /**
+     * Gets the timeout-based completion threshold.
+     *
+     * @return the timeout-based completion threshold in milliseconds, or {@code null} if not used
+     */
     public Long getCompletionTimeoutMs() { return completionTimeoutMs; }
+
+    /**
+     * Sets the timeout-based completion threshold.
+     *
+     * @param completionTimeoutMs the timeout-based completion threshold in milliseconds
+     */
     public void setCompletionTimeoutMs(Long completionTimeoutMs) { this.completionTimeoutMs = completionTimeoutMs; }
 }
