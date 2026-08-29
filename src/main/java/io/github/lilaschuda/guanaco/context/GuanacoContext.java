@@ -22,9 +22,10 @@ import org.apache.camel.spi.Resource;
 import org.apache.camel.spring.SpringCamelContext;
 import org.apache.camel.support.PluginHelper;
 import org.apache.camel.support.ResourceHelper;
+import org.springframework.context.support.StaticApplicationContext;
 
 /**
- * Main entry point for camel-guanaco[cite: 32].
+ * Main entry point for camel-guanaco.
  *
  * <p>Usage:
  * <pre>{@code
@@ -50,28 +51,36 @@ public class GuanacoContext extends SpringCamelContext {
     /**
      * Creates a new context that will scan {@code basePackage} for
      * {@link GuanacoRoute}-annotated {@link Processor} implementations once
-     * {@link #wireRoutes()} is called[cite: 32].
+     * {@link #wireRoutes()} is called.
+     *
+     * <p>Sets a lightweight, empty {@link StaticApplicationContext} by
+     * default, since {@code SpringCamelContext} requires one to be present
+     * before {@link #wireRoutes()}/{@code start()} regardless of whether
+     * legacy XML coexistence is used. Call {@code setApplicationContext(...)}
+     * with a real Spring {@code ApplicationContext} afterward (and before
+     * {@link #wireRoutes()}) to give routes access to your own Spring beans.
      *
      * @param basePackage the root package to scan for route processors and
-     *        {@link RouteOutcome} implementations[cite: 32]
+     *        {@link RouteOutcome} implementations
      */
     public GuanacoContext(String basePackage) {
         this.basePackage = basePackage;
         this.configLoader = new ConfigLoader();
         this.inspector = new TopologyInspector();
+        this.setApplicationContext(new StaticApplicationContext());
     }
 
     /**
      * Registers a native, Java-constructed AggregationStrategy under a name
-     * that {@code aggregate.strategyRef} in routes.yaml/json can reference[cite: 32].
+     * that {@code aggregate.strategyRef} in routes.yaml/json can reference.
      *
      * <p>Call this before {@link #wireRoutes()}; registrations made
-     * afterward are not guaranteed to be visible to already-built routes[cite: 32].
+     * afterward are not guaranteed to be visible to already-built routes.
      *
-     * @param name the name referenced by {@code aggregate.strategyRef} in configuration[cite: 32]
-     * @param strategy the strategy instance to register under that name[cite: 32]
+     * @param name the name referenced by {@code aggregate.strategyRef} in configuration
+     * @param strategy the strategy instance to register under that name
      * @throws IllegalArgumentException if name or strategy is null/blank,
-     *         or if a strategy is already registered under this name[cite: 32]
+     *         or if a strategy is already registered under this name
      */
     public void registerAggregationStrategy(String name, AggregationStrategy strategy) {
         if (name == null || name.isBlank()) {
@@ -93,12 +102,12 @@ public class GuanacoContext extends SpringCamelContext {
 
     /**
      * Registers a native, Java-constructed {@link GuanacoDelayStrategy} under a name
-     * that {@code delayer.delayStrategyRef} can reference[cite: 32].
+     * that {@code delayer.delayStrategyRef} can reference.
      *
-     * @param name the name referenced by {@code delayer.delayStrategyRef} in configuration[cite: 32]
-     * @param strategy the strategy instance to register under that name[cite: 32]
+     * @param name the name referenced by {@code delayer.delayStrategyRef} in configuration
+     * @param strategy the strategy instance to register under that name
      * @throws IllegalArgumentException if name or strategy is null/blank,
-     *         or if a strategy is already registered under this name[cite: 32].
+     *         or if a strategy is already registered under this name.
      */
     public void registerDelayStrategy(String name, GuanacoDelayStrategy strategy) {
         if (name == null || name.isBlank()) {
@@ -119,11 +128,11 @@ public class GuanacoContext extends SpringCamelContext {
     }
 
     /**
-     * Supplies the route configurations {@link #wireRoutes()} operates on[cite: 32]. Defaults to
-     * loading from routes.yaml/json[cite: 32]. Overridable so test support code can inject
-     * route configs built programmatically[cite: 32].
+     * Supplies the route configurations {@link #wireRoutes()} operates on. Defaults to
+     * loading from routes.yaml/json. Overridable so test support code can inject
+     * route configs built programmatically.
      *
-     * @return the loaded configuration describing every configured route[cite: 32]
+     * @return the loaded configuration describing every configured route
      */
     protected GuanacoConfig loadConfig() {
         return configLoader.load();
@@ -132,10 +141,10 @@ public class GuanacoContext extends SpringCamelContext {
     /**
      * Scans for {@link GuanacoRoute}-annotated processors, validates their topology
      * against the configured routes, and registers the generated routes with this
-     * context[cite: 32].
+     * context.
      *
      * @throws Exception if a processor cannot be instantiated, its declared topology
-     *         doesn't match its configuration, or an underlying Camel route fails to build[cite: 32]
+     *         doesn't match its configuration, or an underlying Camel route fails to build
      */
     public void wireRoutes() throws Exception {
         log.info("=== camel-guanaco wiring routes ===");
@@ -206,10 +215,10 @@ public class GuanacoContext extends SpringCamelContext {
     }
     
     /**
-     * Loads legacy Camel XML {@code <route>} definitions from a classpath resource[cite: 32].
+     * Loads legacy Camel XML {@code <route>} definitions from a classpath resource.
      *
-     * @param classpathResource the classpath-relative path to the XML route file[cite: 32]
-     * @throws Exception if the resource exists but its route definitions fail to parse or load[cite: 32]
+     * @param classpathResource the classpath-relative path to the XML route file
+     * @throws Exception if the resource exists but its route definitions fail to parse or load
      */
     public void loadLegacyXmlRoutes(String classpathResource) throws Exception {
         Resource resource = ResourceHelper.resolveMandatoryResource(this, "classpath:" + classpathResource);

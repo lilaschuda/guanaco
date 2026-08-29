@@ -36,7 +36,7 @@ import org.apache.camel.model.ThrottleDefinition;
 import org.apache.camel.support.processor.idempotent.MemoryIdempotentRepository;
 
 /**
- * Constructs native Camel route graphs for a specific Guanaco processor[cite: 35].
+ * Constructs native Camel route graphs for a specific Guanaco processor.
  */
 class GuanacoRouteBuilder extends RouteBuilder {
 
@@ -52,13 +52,13 @@ class GuanacoRouteBuilder extends RouteBuilder {
     private ProducerTemplate producerTemplate;
 
     /**
-     * Constructs a route builder for the given processor and route configuration[cite: 35].
+     * Constructs a route builder for the given processor and route configuration.
      *
-     * @param processorInstance the processor instance executing business logic[cite: 35]
-     * @param routeInterface the route interface implemented by the processor[cite: 35]
-     * @param config the route configuration options[cite: 35]
-     * @param processorName the name identifying this processor[cite: 35]
-     * @param runtimeContext the global boot-time runtime context[cite: 35, 36]
+     * @param processorInstance the processor instance executing business logic
+     * @param routeInterface the route interface implemented by the processor
+     * @param config the route configuration options
+     * @param processorName the name identifying this processor
+     * @param runtimeContext the global boot-time runtime context
      */
     public GuanacoRouteBuilder(
             Processor<? extends RouteOutcome<?>> processorInstance,

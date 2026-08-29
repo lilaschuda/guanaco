@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 
 /**
  * Validates route configurations against declared route outcomes, EIP parameters,
- * and forbidden component schemes[cite: 31].
+ * and forbidden component schemes.
  */
 class BindingValidator {
 
@@ -37,9 +37,9 @@ class BindingValidator {
     private final ValidationMode mode;
 
     /**
-     * Constructs a validator operating under the specified validation mode[cite: 31].
+     * Constructs a validator operating under the specified validation mode.
      *
-     * @param mode the mode governing validation behavior for missing or extra bindings[cite: 31]
+     * @param mode the mode governing validation behavior for missing or extra bindings
      */
     public BindingValidator(ValidationMode mode) {
         this.mode = mode;
@@ -47,12 +47,12 @@ class BindingValidator {
     }
 
     /**
-     * Validates that bindings declared in configuration match the outcomes declared in code[cite: 31].
+     * Validates that bindings declared in configuration match the outcomes declared in code.
      *
-     * @param processorName the name of the processor being validated[cite: 31]
-     * @param declaredOutcomes the set of simple outcome names declared by the processor[cite: 31]
-     * @param routeConfig the route configuration loaded for this processor[cite: 31]
-     * @param registry the boot-time registry of concrete {@link RouteOutcome} classes[cite: 31, 38]
+     * @param processorName the name of the processor being validated
+     * @param declaredOutcomes the set of simple outcome names declared by the processor
+     * @param routeConfig the route configuration loaded for this processor
+     * @param registry the boot-time registry of concrete {@link RouteOutcome} classes
      */
     public void validate(String processorName, Set<String> declaredOutcomes, RouteConfig routeConfig,
             RouteOutcomeRegistry registry) {
@@ -115,20 +115,20 @@ class BindingValidator {
     /**
      * Validates that no per-binding circuitBreaker override is declared on an
      * outcome that isn't a permitted subtype of the processor's sealed
-     * hierarchy[cite: 31]. Such an outcome is, by construction, only ever reachable via
+     * hierarchy. Such an outcome is, by construction, only ever reachable via
      * Multicast/Split's producerTemplate.send() path, which has no Camel DSL
-     * node for a circuit breaker to wrap[cite: 31].
+     * node for a circuit breaker to wrap.
      *
      * <p>
      * This does NOT catch the residual, undecidable case: a sealed- hierarchy
-     * outcome that is ALSO emitted via Multicast/Split by developer code[cite: 31]. In
+     * outcome that is ALSO emitted via Multicast/Split by developer code. In
      * that case the circuit breaker silently won't apply on the Multicast/Split
-     * path — documented as a known limitation rather than silently ignored[cite: 31].
+     * path — documented as a known limitation rather than silently ignored.
      *
-     * @param processorName the name of the processor being validated[cite: 31]
-     * @param routeConfig the route configuration loaded for this processor[cite: 31]
-     * @param routeInterface the route interface implemented by the processor[cite: 31]
-     * @throws InvalidRouteConfigurationException if a circuit breaker override is invalidly declared[cite: 31]
+     * @param processorName the name of the processor being validated
+     * @param routeConfig the route configuration loaded for this processor
+     * @param routeInterface the route interface implemented by the processor
+     * @throws InvalidRouteConfigurationException if a circuit breaker override is invalidly declared
      */
     public void validateCircuitBreakerScope(String processorName, RouteConfig routeConfig,
             Class<? extends RouteOutcome<?>> routeInterface) {
@@ -157,11 +157,11 @@ class BindingValidator {
     }
 
     /**
-     * Validates circuit breaker settings across route-level and binding-level overrides[cite: 31].
+     * Validates circuit breaker settings across route-level and binding-level overrides.
      *
-     * @param processorName the name of the processor being validated[cite: 31]
-     * @param routeConfig the route configuration loaded for this processor[cite: 31]
-     * @throws InvalidRouteConfigurationException if circuit breaker configuration values are invalid[cite: 31]
+     * @param processorName the name of the processor being validated
+     * @param routeConfig the route configuration loaded for this processor
+     * @throws InvalidRouteConfigurationException if circuit breaker configuration values are invalid
      */
     public void validateCircuitBreakerConfig(String processorName, RouteConfig routeConfig) {
         validateCircuitBreakerShape(processorName, "circuitBreaker", routeConfig.getCircuitBreaker());
@@ -186,11 +186,11 @@ class BindingValidator {
     }
 
     /**
-     * Validates aggregate EIP configuration parameters[cite: 31].
+     * Validates aggregate EIP configuration parameters.
      *
-     * @param processorName the name of the processor being validated[cite: 31]
-     * @param routeConfig the route configuration loaded for this processor[cite: 31]
-     * @throws InvalidRouteConfigurationException if required fields are missing or invalid[cite: 31]
+     * @param processorName the name of the processor being validated
+     * @param routeConfig the route configuration loaded for this processor
+     * @throws InvalidRouteConfigurationException if required fields are missing or invalid
      */
     public void validateAggregateConfig(String processorName, RouteConfig routeConfig) {
         GuanacoAggregateConfig agg = routeConfig.getAggregate();
@@ -222,11 +222,11 @@ class BindingValidator {
     }
 
     /**
-     * Validates idempotent consumer EIP configuration parameters[cite: 31].
+     * Validates idempotent consumer EIP configuration parameters.
      *
-     * @param processorName the name of the processor being validated[cite: 31]
-     * @param routeConfig the route configuration loaded for this processor[cite: 31]
-     * @throws InvalidRouteConfigurationException if configuration options are invalid[cite: 31]
+     * @param processorName the name of the processor being validated
+     * @param routeConfig the route configuration loaded for this processor
+     * @throws InvalidRouteConfigurationException if configuration options are invalid
      */
     public void validateIdempotentConfig(String processorName, RouteConfig routeConfig) {
         GuanacoIdempotentConfig idempotent = routeConfig.getIdempotent();
@@ -249,11 +249,11 @@ class BindingValidator {
     }
 
     /**
-     * Validates resequence EIP configuration parameters[cite: 31].
+     * Validates resequence EIP configuration parameters.
      *
-     * @param processorName the name of the processor being validated[cite: 31]
-     * @param routeConfig the route configuration loaded for this processor[cite: 31]
-     * @throws InvalidRouteConfigurationException if resequence parameters are inconsistent or invalid[cite: 31]
+     * @param processorName the name of the processor being validated
+     * @param routeConfig the route configuration loaded for this processor
+     * @throws InvalidRouteConfigurationException if resequence parameters are inconsistent or invalid
      */
     public void validateResequenceConfig(String processorName, RouteConfig routeConfig) {
         GuanacoResequenceConfig reseq = routeConfig.getResequence();
@@ -320,12 +320,12 @@ class BindingValidator {
     /**
      * Validates that no per-binding DSL-only policy (circuitBreaker, throttler, delayer)
      * is declared on an outcome that isn't a permitted subtype of the
-     * processor's sealed hierarchy[cite: 31].
+     * processor's sealed hierarchy.
      *
-     * @param processorName the name of the processor being validated[cite: 31]
-     * @param routeConfig the route configuration loaded for this processor[cite: 31]
-     * @param routeInterface the route interface implemented by the processor[cite: 31]
-     * @throws InvalidRouteConfigurationException if a DSL policy override is invalidly declared[cite: 31]
+     * @param processorName the name of the processor being validated
+     * @param routeConfig the route configuration loaded for this processor
+     * @param routeInterface the route interface implemented by the processor
+     * @throws InvalidRouteConfigurationException if a DSL policy override is invalidly declared
      */
     public void validateDslOnlyPolicyScope(String processorName, RouteConfig routeConfig,
             Class<? extends RouteOutcome<?>> routeInterface) {
@@ -365,11 +365,11 @@ class BindingValidator {
     }
 
     /**
-     * Validates the structural shape of throttler configuration blocks[cite: 31].
+     * Validates the structural shape of throttler configuration blocks.
      *
-     * @param processorName the name of the processor being validated[cite: 31]
-     * @param routeConfig the route configuration loaded for this processor[cite: 31]
-     * @throws InvalidRouteConfigurationException if throttler parameters are incomplete or contradictory[cite: 31]
+     * @param processorName the name of the processor being validated
+     * @param routeConfig the route configuration loaded for this processor
+     * @throws InvalidRouteConfigurationException if throttler parameters are incomplete or contradictory
      */
     public void validateThrottlerConfig(String processorName, RouteConfig routeConfig) {
         validateThrottlerShape(processorName, "throttler", routeConfig.getThrottler());
@@ -416,11 +416,11 @@ class BindingValidator {
     }
 
     /**
-     * Validates the structural shape of delayer configuration blocks[cite: 31].
+     * Validates the structural shape of delayer configuration blocks.
      *
-     * @param processorName the name of the processor being validated[cite: 31]
-     * @param routeConfig the route configuration loaded for this processor[cite: 31]
-     * @throws InvalidRouteConfigurationException if delayer parameters are incomplete or ambiguous[cite: 31]
+     * @param processorName the name of the processor being validated
+     * @param routeConfig the route configuration loaded for this processor
+     * @throws InvalidRouteConfigurationException if delayer parameters are incomplete or ambiguous
      */
     public void validateDelayerConfig(String processorName, RouteConfig routeConfig) {
         validateDelayerShape(processorName, "delayer", routeConfig.getDelayer());

@@ -8,7 +8,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Bridges Camel's native splitter aggregation engine to the optional,
- * user-supplied AggregationStrategy carried on a Split outcome[cite: 33].
+ * user-supplied AggregationStrategy carried on a Split outcome.
  */
 class GuanacoDelegatingAggregationStrategy implements AggregationStrategy {
 
@@ -18,10 +18,10 @@ class GuanacoDelegatingAggregationStrategy implements AggregationStrategy {
     private final String processorName;
 
     /**
-     * Constructs a delegating aggregation strategy[cite: 33].
+     * Constructs a delegating aggregation strategy.
      *
-     * @param outcomeProperty the exchange property key storing the outcome[cite: 33, 35]
-     * @param processorName the name of the processor managing the route[cite: 33]
+     * @param outcomeProperty the exchange property key storing the outcome
+     * @param processorName the name of the processor managing the route
      */
     GuanacoDelegatingAggregationStrategy(String outcomeProperty, String processorName) {
         this.outcomeProperty = outcomeProperty;

@@ -25,22 +25,26 @@ Everything shipped through v0.8.0:
 
 The following are considered the public API and are locked at v1.0 — changes to any of these after v1.0 ships are breaking changes:
 
-- `RouteOutcome<T>` and its contract (`body()`)
+- `@GuanacoRoute`, `RouteOutcome<T>` and its contract (`body()`)
 - `Processor<R>` (`process(Exchange)`)
 - `Drop`, `Multicast`, `Split` and their construction APIs
-- The `routes.yaml`/`routes.json` schema: `bindings` (both short-form string and long-form `BindingTarget` shapes), `errorHandler`, `aggregate`, `idempotent`, `resequence`, `throttler`, `delayer`, `circuitBreaker`, and their nested fields
-- `GuanacoContext`'s public methods: `wireRoutes()`, `start()`, `stop()`, `registerAggregationStrategy(...)`, `registerDelayStrategy(...)`, `loadConfig()` (protected, overridable)
-- `GuanacoAggregateConfig`, `GuanacoIdempotentConfig`, `GuanacoResequenceConfig`, `GuanacoThrottlerConfig`, `GuanacoDelayerConfig`, `GuanacoCircuitBreakerConfig`, `BindingTarget`, `GuanacoRuntimeContext`
 - `GuanacoDelayStrategy`
+- The `routes.yaml`/`routes.json` schema and its backing types: `GuanacoConfig` (including nested `FrameworkConfig` and `ValidationMode`), `RouteConfig` (including nested `ErrorHandlerConfig`), `BindingTarget`, `GuanacoAggregateConfig`, `GuanacoIdempotentConfig`, `GuanacoResequenceConfig`, `GuanacoThrottlerConfig`, `GuanacoDelayerConfig`, `GuanacoCircuitBreakerConfig`, and all their nested fields
+- `ConfigLoader`'s current two-method surface: `load()` (default classpath resolution) and `load(String)` (explicit single classpath resource). See "Explicitly deferred" below for planned multi-file loading — additive, won't change this signature.
+- `GuanacoContext`'s public surface: the constructor (`GuanacoContext(String basePackage)`), `wireRoutes()`, `loadLegacyXmlRoutes(String)`, `registerAggregationStrategy(...)`, `registerDelayStrategy(...)`, `loadConfig()` (protected, overridable). `start()`/`stop()` are inherited from `SpringCamelContext` — Guanaco freezes its own usage contract around them (that they exist and behave like normal Camel lifecycle methods), but their exact signatures track upstream Spring/Camel versions, not something Guanaco can unilaterally guarantee.
+- The exception hierarchy: `context.exception.{BindingValidationException, ForbiddenComponentException, GuanacoInspectionException, GuanacoRouteBuilderException, InvalidRouteConfigurationException}` and `config.exception.{GuanacoConfigException, UnsupportedConfigFormatException}` — their existence, package, and constructor signatures
 - `GuanacoTestSupport`, `GuanacoRuntimeEnvironment`
 - The fixed pipeline orderings themselves (Idempotent → Resequence → Aggregate; Throttle → Delay → Circuit Breaker) — these are behavioral guarantees, not just API shape, and are part of what v1.0 promises to keep stable
 
-Internal classes not listed here (`GuanacoRouteBuilder`, `TopologyInspector`, `BindingValidator`, `RouteOutcomeRegistry`, `GuanacoResilienceHelper`, `LoggingIdempotentRepository`, `GuanacoDelegatingAggregationStrategy`) are implementation details and may change without a major version bump, even though some are technically public classes today.
+Internal classes not listed here (`GuanacoRouteBuilder`, `TopologyInspector`, `BindingValidator`, `RouteOutcomeRegistry`, `GuanacoResilienceHelper`, `LoggingIdempotentRepository`, `GuanacoDelegatingAggregationStrategy`, `GuanacoRuntimeContext`) are implementation details and may change without a major version bump. These are genuinely package-private as of v1.0, not just documented-as-internal by convention.
+
+**Not covered by the v1.0 freeze:** `api.telemetry` (`GuanacoTelemetryListener`, `GuanacoMicrometerListener`). This package ships in the v1.0 jar but is unwired from the engine — no route-building code emits these events yet — so its method signatures may still change ahead of stabilization, without that being treated as a breaking change. See the package's own Javadoc.
 
 ## Explicitly deferred to v1.1 and beyond
 
 These were identified early in the EIP-coverage review and deliberately scoped out of v1.0, to keep the initial stable release focused rather than open-ended:
 
+- **Multi-file / modular config loading** — `ConfigLoader` loading a collection of config files rather than a single named resource. A single custom filename has little value on its own; the real use case is splitting config across multiple files. Needs a design discussion resolving collision semantics (duplicate route names across files), where `framework:`/`validation:` lives when config is split across files, and whether file ordering matters — none of this has been discussed yet.
 - **ControlBus** — programmatic route lifecycle management (start/stop/status of routes at runtime)
 - **Wire Tap** — async, non-blocking copies of a message sent to a diagnostic path
 - **Message History** — tracking a message's route through the system via a header

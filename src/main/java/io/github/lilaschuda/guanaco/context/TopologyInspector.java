@@ -15,18 +15,18 @@ import java.util.stream.Collectors;
 
 /**
  * Inspects a {@link Processor} implementation to extract its route topology by
- * reflecting on the sealed interface type parameter and its permitted subtypes[cite: 39].
+ * reflecting on the sealed interface type parameter and its permitted subtypes.
  */
 class TopologyInspector {
 
     private static final Logger log = LoggerFactory.getLogger(TopologyInspector.class);
 
     /**
-     * Extracts the set of permitted subtype classes from the sealed route interface[cite: 39].
+     * Extracts the set of permitted subtype classes from the sealed route interface.
      *
-     * @param processorClass a class implementing {@code Processor<R>}[cite: 39]
-     * @return set of permitted outcome classes[cite: 39]
-     * @throws GuanacoInspectionException if the type cannot be inspected or {@code R} is not sealed[cite: 39]
+     * @param processorClass a class implementing {@code Processor<R>}
+     * @return set of permitted outcome classes
+     * @throws GuanacoInspectionException if the type cannot be inspected or {@code R} is not sealed
      */
     public Set<Class<? extends RouteOutcome<?>>> extractRouteOutcomes(Class<?> processorClass) {
         Class<? extends RouteOutcome<?>> routeInterface = extractRouteInterface(processorClass);
@@ -52,11 +52,11 @@ class TopologyInspector {
     }
 
     /**
-     * Extracts the route interface type argument declared on a {@link Processor} implementation[cite: 39].
+     * Extracts the route interface type argument declared on a {@link Processor} implementation.
      *
-     * @param processorClass the target processor class to inspect[cite: 39]
-     * @return the generic type class extending {@link RouteOutcome}[cite: 39]
-     * @throws GuanacoInspectionException if the class does not directly specify an explicit generic outcome[cite: 39]
+     * @param processorClass the target processor class to inspect
+     * @return the generic type class extending {@link RouteOutcome}
+     * @throws GuanacoInspectionException if the class does not directly specify an explicit generic outcome
      */
     public Class<? extends RouteOutcome<?>> extractRouteInterface(Class<?> processorClass) {
 

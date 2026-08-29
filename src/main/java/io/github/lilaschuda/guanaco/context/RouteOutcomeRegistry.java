@@ -14,7 +14,7 @@ import java.util.Set;
 
 /**
  * An immutable, boot-time-only registry of every concrete {@link RouteOutcome}
- * implementation found within a single package-bounded classpath scan[cite: 38].
+ * implementation found within a single package-bounded classpath scan.
  */
 class RouteOutcomeRegistry {
 
@@ -23,9 +23,9 @@ class RouteOutcomeRegistry {
     private final Map<String, Class<? extends RouteOutcome<?>>> byName;
 
     /**
-     * Protected constructor for subclasses or internal instantiation[cite: 38].
+     * Protected constructor for subclasses or internal instantiation.
      *
-     * @param byName map of simple class names to concrete {@link RouteOutcome} classes[cite: 38]
+     * @param byName map of simple class names to concrete {@link RouteOutcome} classes
      */
     protected RouteOutcomeRegistry(Map<String, Class<? extends RouteOutcome<?>>> byName) {
         this.byName = Collections.unmodifiableMap(new HashMap<>(byName));
@@ -33,11 +33,11 @@ class RouteOutcomeRegistry {
 
     /**
      * Scans {@code basePackage} once for every concrete class implementing
-     * {@link RouteOutcome}, and freezes the result[cite: 38].
+     * {@link RouteOutcome}, and freezes the result.
      *
-     * @param basePackage the root package to scan[cite: 38]
-     * @return a frozen registry instance[cite: 38]
-     * @throws GuanacoInspectionException if two distinct classes share the same simple name[cite: 38]
+     * @param basePackage the root package to scan
+     * @return a frozen registry instance
+     * @throws GuanacoInspectionException if two distinct classes share the same simple name
      */
     public static RouteOutcomeRegistry scan(String basePackage) {
         Reflections reflections = new Reflections(basePackage);
@@ -61,17 +61,17 @@ class RouteOutcomeRegistry {
 
     /**
      * Builds a name-to-class map from candidate classes, filtering out non-concrete types
-     * and rejecting simple name collisions[cite: 38].
+     * and rejecting simple name collisions.
      *
      * <p>
      * Accepts a wildcard-bounded Iterable (rather than an exact
      * {@code Iterable<Class<? extends RouteOutcome<?>>>}) since this method only ever
-     * reads from candidates[cite: 38].
+     * reads from candidates.
      *
-     * @param candidates candidate outcome classes to inspect[cite: 38]
-     * @param sourceDescription context description for error reporting[cite: 38]
-     * @return mapped simple names to concrete outcome classes[cite: 38]
-     * @throws GuanacoInspectionException on a simple name collision between two distinct classes[cite: 38]
+     * @param candidates candidate outcome classes to inspect
+     * @param sourceDescription context description for error reporting
+     * @return mapped simple names to concrete outcome classes
+     * @throws GuanacoInspectionException on a simple name collision between two distinct classes
      */
     protected static Map<String, Class<? extends RouteOutcome<?>>> buildRegistryMap(
             Iterable<? extends Class<? extends RouteOutcome<?>>> candidates, String sourceDescription) throws GuanacoInspectionException {
@@ -103,28 +103,28 @@ class RouteOutcomeRegistry {
     }
 
     /**
-     * Checks if a concrete {@link RouteOutcome} with this simple name was registered[cite: 38].
+     * Checks if a concrete {@link RouteOutcome} with this simple name was registered.
      *
-     * @param simpleName the simple class name to verify[cite: 38]
-     * @return true if registered, false otherwise[cite: 38]
+     * @param simpleName the simple class name to verify
+     * @return true if registered, false otherwise
      */
     public boolean contains(String simpleName) {
         return byName.containsKey(simpleName);
     }
 
     /**
-     * Returns the full frozen set of registered simple names[cite: 38].
+     * Returns the full frozen set of registered simple names.
      *
-     * @return set of registered outcome names[cite: 38]
+     * @return set of registered outcome names
      */
     public Set<String> knownNames() {
         return byName.keySet();
     }
 
     /**
-     * Returns the total count of registered outcome classes[cite: 38].
+     * Returns the total count of registered outcome classes.
      *
-     * @return registry size[cite: 38]
+     * @return registry size
      */
     public int size() {
         return byName.size();

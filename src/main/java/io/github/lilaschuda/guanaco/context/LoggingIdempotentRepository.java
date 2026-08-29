@@ -6,7 +6,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Wraps a delegate {@link IdempotentRepository} to guarantee a duplicate is
- * always logged, regardless of Camel's internal logging configuration[cite: 37].
+ * always logged, regardless of Camel's internal logging configuration.
  */
 class LoggingIdempotentRepository implements IdempotentRepository {
 
@@ -17,11 +17,11 @@ class LoggingIdempotentRepository implements IdempotentRepository {
     private final String messageIdHeader;
 
     /**
-     * Constructs a logging wrapper around an idempotent repository[cite: 37].
+     * Constructs a logging wrapper around an idempotent repository.
      *
-     * @param delegate the underlying repository implementation[cite: 37]
-     * @param processorName the name of the processor using this repository[cite: 37]
-     * @param messageIdHeader the message ID header key being checked[cite: 37]
+     * @param delegate the underlying repository implementation
+     * @param processorName the name of the processor using this repository
+     * @param messageIdHeader the message ID header key being checked
      */
     public LoggingIdempotentRepository(IdempotentRepository delegate, String processorName, String messageIdHeader) {
         this.delegate = delegate;

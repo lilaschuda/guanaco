@@ -7,11 +7,11 @@ import java.util.Map;
 
 /**
  * The boot-time-global, cross-route context handed to every
- * {@link GuanacoRouteBuilder} constructed within one {@link GuanacoContext#wireRoutes()} call[cite: 32, 35, 36].
+ * {@link GuanacoRouteBuilder} constructed within one {@link GuanacoContext#wireRoutes()} call.
  *
- * @param outcomeRegistry the boot-time registry of concrete route outcomes[cite: 36, 38]
- * @param aggregationStrategies registered custom aggregation strategies[cite: 36]
- * @param delayStrategies registered custom delay computation strategies[cite: 36]
+ * @param outcomeRegistry the boot-time registry of concrete route outcomes
+ * @param aggregationStrategies registered custom aggregation strategies
+ * @param delayStrategies registered custom delay computation strategies
  */
 record GuanacoRuntimeContext(
         RouteOutcomeRegistry outcomeRegistry,

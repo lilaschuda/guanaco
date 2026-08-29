@@ -1,0 +1,62 @@
+--- a/pom.xml	2026-08-28 12:43:06.000000000 +0000
++++ b/pom.xml	2026-08-29 08:44:05.869200035 +0000
+@@ -6,7 +6,7 @@
+ 
+     <groupId>io.github.lilaschuda</groupId>
+     <artifactId>guanaco</artifactId>
+-    <version>0.10.0-SNAPSHOT</version>
++    <version>0.11.0-SNAPSHOT</version>
+     <packaging>jar</packaging>
+ 
+     <name>guanaco</name>
+--- a/CHANGELOG.md	2026-08-28 09:58:53.000000000 +0000
++++ b/CHANGELOG.md	2026-08-29 08:44:16.340620564 +0000
+@@ -5,7 +5,47 @@
+ tagged release. Version numbers still advance one subversion per completed
+ set of features, so the commit history stays easy to follow.
+ 
+-## [0.10.0]
++## [0.11.0]
++
++Phase 2 of the v1.0 release process: auditing `ROADMAP.md`'s API freeze
++list against the actual current code, plus two small fixes surfaced along
++the way.
++
++### Fixed
++- `GuanacoContext`'s constructor now sets a default, empty
++  `StaticApplicationContext` — `SpringCamelContext` requires one to be
++  present before `wireRoutes()`/`start()` regardless of whether legacy XML
++  coexistence is used, and the README's own canonical usage example didn't
++  set one, so it would have NPE'd for any user following it verbatim.
++  Still fully overridable via `setApplicationContext(...)` before
++  `wireRoutes()` for real Spring bean integration.
++- Removed stray `[cite: N]` citation artifacts (120 occurrences across 9
++  files in `context`) left over from doc generation, previously visible in
++  the published Javadoc.
++
++### Changed
++- **API freeze audit (`ROADMAP.md`)**: corrected against the real current
++  code rather than the original v1.0 plan. Removed `GuanacoRuntimeContext`
++  from the frozen list (confirmed package-private, never publicly exposed).
++  Added everything genuinely public that was missing from the list: the
++  full exception hierarchy (`context.exception.*`, `config.exception.*`),
++  `@GuanacoRoute`, `GuanacoContext`'s constructor and
++  `loadLegacyXmlRoutes(String)`, `RouteConfig`/`ErrorHandlerConfig`,
++  `GuanacoConfig`/`FrameworkConfig`/`ValidationMode`, and `ConfigLoader`'s
++  `load()`/`load(String)`. Corrected the internal-classes caveat to reflect
++  that those classes are now genuinely package-private, not just
++  documented-as-internal by convention. Documented `api.telemetry`'s
++  exclusion from the freeze at the roadmap level (previously only in the
++  package's own Javadoc). Added multi-file/modular config loading to the
++  explicitly-deferred list, with its open design questions noted.
++- Decided and documented: the `GuanacoContext extends SpringCamelContext`
++  coupling is deliberately left as-is for v1.0. Spring integration is a
++  real feature in its own right (custom bean access), not just a migration
++  bridge, so there's no natural point to drop it. Any decoupling is
++  deferred to a v2.0 major-version discussion informed by real user
++  feedback — v2.0 is not required to stay backward-compatible with v1.x.
++
++
+ 
+ ### Changed
+ - **Public API Separation**: Re-architected the package structure to expose 

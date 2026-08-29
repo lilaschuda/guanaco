@@ -6,16 +6,16 @@ import org.apache.camel.model.ProcessorDefinition;
 import org.apache.camel.model.Resilience4jConfigurationDefinition;
 
 /**
- * Helper utility for applying Resilience4j circuit breaker configuration to Camel DSL definitions[cite: 34].
+ * Helper utility for applying Resilience4j circuit breaker configuration to Camel DSL definitions.
  */
 class GuanacoResilienceHelper {
 
     /**
-     * Applies a Resilience4j circuit breaker node to a route definition[cite: 34].
+     * Applies a Resilience4j circuit breaker node to a route definition.
      *
-     * @param route the parent processor definition node[cite: 34]
-     * @param targetUri the endpoint URI to wrap[cite: 34]
-     * @param config the circuit breaker configuration to apply[cite: 34]
+     * @param route the parent processor definition node
+     * @param targetUri the endpoint URI to wrap
+     * @param config the circuit breaker configuration to apply
      */
     public static void applyCircuitBreaker(
             ProcessorDefinition<?> route,
