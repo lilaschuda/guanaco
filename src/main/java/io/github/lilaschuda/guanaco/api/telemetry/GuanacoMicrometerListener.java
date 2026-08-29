@@ -8,6 +8,11 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Micrometer-backed implementation of {@link GuanacoTelemetryListener}.
+ *
+ * <p><b>Not covered by the v1.0 API freeze</b> — see the {@code api.telemetry}
+ * package documentation. Requires {@code micrometer-core} on the classpath;
+ * declared {@code optional}/{@code provided} in this project's POM, so it is
+ * never pulled onto a consumer's classpath unless they choose to use it.
  */
 public class GuanacoMicrometerListener implements GuanacoTelemetryListener {
 

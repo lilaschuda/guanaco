@@ -2,6 +2,10 @@ package io.github.lilaschuda.guanaco.api.telemetry;
 
 /**
  * Event listener for tracking execution metrics, EIP operations, and fault tolerance events.
+ *
+ * <p><b>Not covered by the v1.0 API freeze</b> — see the {@code api.telemetry}
+ * package documentation. Unwired from the engine as of v1.0; method
+ * signatures may still change ahead of stabilization.
  */
 public interface GuanacoTelemetryListener {
 
