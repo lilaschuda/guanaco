@@ -307,7 +307,7 @@ Guanaco depends on `camel-spring-xml` and `spring-context` to support loading le
 <dependency>
     <groupId>io.github.lilaschuda</groupId>
     <artifactId>guanaco</artifactId>
-    <version>0.6.0-SNAPSHOT</version>
+    <version>1.0.0</version>
 </dependency>
 ```
 

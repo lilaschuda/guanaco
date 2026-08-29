@@ -1,9 +1,27 @@
 # Changelog
 
-All notable changes to Guanaco are documented here. Pre-1.0 versions are
-`-SNAPSHOT` and not published as tagged releases — v1.0.0 will be the first
-tagged release. Version numbers still advance one subversion per completed
-set of features, so the commit history stays easy to follow.
+All notable changes to Guanaco are documented here. Versions before v1.0.0
+were `-SNAPSHOT` and not published as tagged releases. From v1.0.0 onward,
+this project follows Semantic Versioning: the public API and behavioral
+guarantees documented in `ROADMAP.md`'s "v1.0 API freeze" section will not
+change without a major version bump.
+
+## [1.0.0]
+
+First stable, tagged release. Everything from `0.1.0` through `0.11.0` was
+pre-release iteration; this release freezes the public API and behavioral
+guarantees exactly as documented in `ROADMAP.md`'s "v1.0 API freeze"
+section — the sealed `RouteOutcome`/`Processor`/`Drop`/`Multicast`/`Split`
+contracts, the `routes.yaml`/`routes.json` schema and its backing config
+types, `GuanacoContext`'s public lifecycle, the full exception hierarchy,
+the test-support API, and the fixed EIP pipeline orderings. `api.telemetry`
+ships in this release but is explicitly excluded from the freeze — see its
+package documentation.
+
+### Fixed
+- README's Maven dependency snippet still referenced `0.6.0-SNAPSHOT`, a
+  coordinate that was never actually published (pre-1.0 SNAPSHOTs weren't
+  tagged releases). Updated to `1.0.0`.
 
 ## [0.11.0]
 
