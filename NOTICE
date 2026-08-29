@@ -9,6 +9,18 @@ Guanaco depends on Apache Camel at runtime but does not include, modify, or
 redistribute any portion of the Apache Camel source code or binaries as part
 of this repository.
 
+This product includes software developed by Resilience4j
+(https://resilience4j.readme.io/), licensed under the Apache License,
+Version 2.0. Guanaco depends on Resilience4j (via Camel's camel-resilience4j
+component) at runtime but does not include, modify, or redistribute any
+portion of its source code or binaries as part of this repository.
+
+Guanaco's optional api.telemetry package can integrate with Micrometer
+(https://micrometer.io/), licensed under the Apache License, Version 2.0.
+The micrometer-core dependency is declared optional and provided — it is
+never bundled with Guanaco or pulled onto a consumer's classpath unless
+that consumer chooses to use it.
+
 Guanaco is an independent project and is not affiliated with, endorsed by,
 or sponsored by The Apache Software Foundation. "Apache," "Camel," "Apache
 Camel," and the Apache feather logo are trademarks of The Apache Software
