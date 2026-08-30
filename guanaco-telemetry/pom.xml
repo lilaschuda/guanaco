@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.lilaschuda</groupId>
+        <artifactId>guanaco-parent</artifactId>
+        <version>1.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>guanaco-telemetry</artifactId>
+    <packaging>jar</packaging>
+
+    <name>guanaco-telemetry</name>
+    <description>Opt-in Micrometer-backed telemetry listener for Guanaco. Add this dependency only if you want metrics -- guanaco-core never pulls it in transitively.</description>
+
+    <dependencies>
+        <!-- The contract this module implements. -->
+        <dependency>
+            <groupId>io.github.lilaschuda</groupId>
+            <artifactId>guanaco</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!--
+            Ordinary compile-scope dependency; NOT optional/provided.
+            A consumer who adds guanaco-telemetry has explicitly asked for
+            Micrometer support, so it should resolve transitively for them,
+            same as any other library dependency.
+        -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <version>${micrometer.version}</version>
+        </dependency>
+
+        <!-- Test -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>${assertj.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

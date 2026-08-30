@@ -1,5 +1,6 @@
-package io.github.lilaschuda.guanaco.api.telemetry;
+package io.github.lilaschuda.guanaco.telemetry.micrometer;
 
+import io.github.lilaschuda.guanaco.api.telemetry.GuanacoTelemetryListener;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -9,10 +10,13 @@ import java.util.concurrent.TimeUnit;
 /**
  * Micrometer-backed implementation of {@link GuanacoTelemetryListener}.
  *
- * <p><b>Not covered by the v1.0 API freeze</b> — see the {@code api.telemetry}
- * package documentation. Requires {@code micrometer-core} on the classpath;
- * declared {@code optional}/{@code provided} in this project's POM, so it is
- * never pulled onto a consumer's classpath unless they choose to use it.
+ * <p>Ships in the separate {@code guanaco-telemetry} module. Guanaco's core
+ * module never depends on Micrometer — nothing is pulled onto a consumer's
+ * classpath unless this module is added as an explicit dependency.
+ *
+ * <p>Not registered automatically: construct an instance and pass it to
+ * {@code GuanacoContext.registerTelemetryListener(...)} before calling
+ * {@code wireRoutes()}.
  */
 public class GuanacoMicrometerListener implements GuanacoTelemetryListener {
 
