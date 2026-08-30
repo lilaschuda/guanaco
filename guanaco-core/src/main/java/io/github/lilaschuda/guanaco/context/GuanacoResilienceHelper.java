@@ -76,7 +76,7 @@ class GuanacoResilienceHelper {
                             cause = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Throwable.class);
                         }
                         if (cause != null) {
-                            telemetryListener.onOutcomeFailed(processorName, targetUri, cause.getCause());
+                            telemetryListener.onOutcomeFailed(processorName, targetUri, cause);
                         }
                     })
                     .end();

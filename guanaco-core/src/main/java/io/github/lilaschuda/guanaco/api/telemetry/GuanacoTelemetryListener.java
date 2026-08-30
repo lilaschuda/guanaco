@@ -69,5 +69,7 @@ public interface GuanacoTelemetryListener {
      *
      * @return an unmodifiable list of recent failure records
      */
-    List<FailureRecord> recentFailures();
+    default List<FailureRecord> recentFailures() {
+        return List.of();
+    }
 }

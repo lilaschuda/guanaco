@@ -39,10 +39,6 @@ class GuanacoRouteBuilderResequenceTelemetryTest extends GuanacoRouteBuilderTest
             resequenceEvents.add(rejected);
         }
 
-        @Override
-        public List<FailureRecord> recentFailures() {
-            return this.recentFailures();
-        }
     }
 
     @Test

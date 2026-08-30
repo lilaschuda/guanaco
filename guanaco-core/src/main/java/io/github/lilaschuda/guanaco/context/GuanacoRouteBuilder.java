@@ -582,24 +582,21 @@ class GuanacoRouteBuilder extends RouteBuilder {
                         long duration = start != null ? System.currentTimeMillis() - start : 0;
                         runtimeContext.telemetryListener().onOutcomeDispatched(processorName, outcomeName, uri, duration);
                     })
-                    .doCatch(Throwable.class)
+                    .doFinally()
                     .process(exchange -> {
-                        Throwable cause = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Throwable.class);
-                        runtimeContext.telemetryListener().onOutcomeFailed(processorName, uri, cause);
-
-                        // doCatch always marks the exception EXCEPTION_HANDLED and clears
-                        // exchange.getException() -- unlike onException(), it has no
-                        // .handled(...) option to opt out of that. Without this rethrow,
-                        // a dispatch failure would be recorded correctly but then silently
-                        // treated as delivered: never redelivered, never dead-lettered.
-                        // Mirrors the rethrow GuanacoResilienceHelper.applyCircuitBreaker
-                        // already does for the same reason.
-                        if (cause instanceof Exception e) {
-                            throw e;
-                        } else if (cause instanceof Error err) {
-                            throw err;
-                        } else if (cause != null) {
-                            throw new RuntimeException(cause);
+                        // doFinally, unlike doCatch, needs no manual rethrow: Camel's
+                        // FinallyProcessor automatically restores the original exception
+                        // object after this block runs, regardless of what happens here.
+                        // It also avoids doCatch's rewrap-as-RuntimeException problem for
+                        // checked exceptions. By the time this runs, getException() has
+                        // already been cleared and stashed as EXCEPTION_CAUGHT -- same
+                        // fallback GuanacoResilienceHelper.applyCircuitBreaker uses.
+                        Throwable cause = exchange.getException();
+                        if (cause == null) {
+                            cause = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Throwable.class);
+                        }
+                        if (cause != null) {
+                            runtimeContext.telemetryListener().onOutcomeFailed(processorName, uri, cause);
                         }
                     })
                     .end();

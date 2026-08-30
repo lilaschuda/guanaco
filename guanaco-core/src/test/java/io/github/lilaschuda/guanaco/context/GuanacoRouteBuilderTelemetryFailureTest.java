@@ -42,14 +42,11 @@ class GuanacoRouteBuilderTelemetryFailureTest extends GuanacoRouteBuilderTestSup
 
         @Override
         public void onOutcomeFailed(String routeId, String targetUri, Throwable cause) {
-            FailureRecord failure = new FailureRecord(Instant.now(), "Processor", "mock:bad", "failure", "Error");
-            failures.add(failure);
+            failures.add(new FailureRecord(
+                    Instant.now(), routeId, targetUri,
+                    cause.getClass().getSimpleName(), cause.getMessage()));
         }
 
-        @Override
-        public List<FailureRecord> recentFailures() {
-            return this.recentFailures();
-        }
     }
 
     @Test
@@ -76,15 +73,14 @@ class GuanacoRouteBuilderTelemetryFailureTest extends GuanacoRouteBuilderTestSup
         context.createProducerTemplate().sendBody("direct:orders", "hello");
 
         MockEndpoint.assertIsSatisfied(dead);
-        FailureRecord failure = new FailureRecord(Instant.now(), "Processor", "mock:bad", "failure", "Error");
         assertThat(listener.failures)
         .hasSize(1)
         .first()
         .satisfies(record -> {
             assertThat(record.targetUri()).isEqualTo("mock:bad");
-            assertThat(record.processorName()).isEqualTo("Processor");
-            assertThat(record.exceptionType()).isEqualTo("failure");
-            assertThat(record.exceptionMessage()).isEqualTo("Error");
+            assertThat(record.processorName()).isEqualTo("DispatchFailureTelemetryTest");
+            assertThat(record.exceptionType()).isEqualTo("IllegalStateException");
+            assertThat(record.exceptionMessage()).isEqualTo("simulated downstream failure");
             assertThat(record.timestamp()).isNotNull();
         });
     }
