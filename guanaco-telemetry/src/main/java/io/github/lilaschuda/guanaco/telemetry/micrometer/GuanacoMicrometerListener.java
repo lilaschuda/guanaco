@@ -1,9 +1,14 @@
 package io.github.lilaschuda.guanaco.telemetry.micrometer;
 
+import io.github.lilaschuda.guanaco.api.telemetry.FailureRecord;
 import io.github.lilaschuda.guanaco.api.telemetry.GuanacoTelemetryListener;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import java.time.Instant;
+import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import java.util.concurrent.TimeUnit;
 
@@ -20,7 +25,10 @@ import java.util.concurrent.TimeUnit;
  */
 public class GuanacoMicrometerListener implements GuanacoTelemetryListener {
 
+    private static final int MAX_RECENT_FAILURES = 100;
+    
     private final MeterRegistry registry;
+    private final Queue<FailureRecord> failureLog = new ConcurrentLinkedQueue<>();
 
     /**
      * Constructs a telemetry listener backed by the provided Micrometer registry.
@@ -77,13 +85,35 @@ public class GuanacoMicrometerListener implements GuanacoTelemetryListener {
                 .record(durationMs, TimeUnit.MILLISECONDS);
     }
 
+@Override
+    public void onOutcomeFailed(String processorName, String targetUri, Throwable cause) {
+        String exceptionType = cause != null ? cause.getClass().getSimpleName() : "Unknown";
+        String exceptionMessage = cause != null ? cause.getMessage() : null;
+
+        // 1. Record Micrometer counter
+        registry.counter("guanaco.outcome.failures",
+                "route", processorName,
+                "target", targetUri,
+                "exception", exceptionType
+        ).increment();
+
+        // 2. Log recent failure record (bounded thread-safe ring buffer)
+        FailureRecord record = new FailureRecord(
+                Instant.now(),
+                processorName,
+                targetUri,
+                exceptionType,
+                exceptionMessage
+        );
+
+        failureLog.add(record);
+        while (failureLog.size() > MAX_RECENT_FAILURES) {
+            failureLog.poll();
+        }
+    }
+
     @Override
-    public void onOutcomeFailed(String routeId, String targetUri, Throwable cause) {
-        Counter.builder("guanaco.outcome.failures")
-                .tag("route", routeId)
-                .tag("target", targetUri)
-                .tag("exception", cause.getClass().getSimpleName())
-                .register(registry)
-                .increment();
+    public List<FailureRecord> recentFailures() {
+        return List.copyOf(failureLog);
     }
 }

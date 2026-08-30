@@ -7,6 +7,7 @@ import io.github.lilaschuda.guanaco.config.GuanacoConfig;
 import io.github.lilaschuda.guanaco.config.RouteConfig;
 import io.github.lilaschuda.guanaco.api.GuanacoRoute;
 import io.github.lilaschuda.guanaco.api.Processor;
+import io.github.lilaschuda.guanaco.api.telemetry.GuanacoTelemetryListener;
 import org.apache.camel.AggregationStrategy;
 import org.reflections.Reflections;
 import org.slf4j.Logger;
@@ -47,6 +48,7 @@ public class GuanacoContext extends SpringCamelContext {
 
     private final Map<String, AggregationStrategy> aggregationStrategies = new ConcurrentHashMap<>();
     private final Map<String, GuanacoDelayStrategy> delayStrategies = new ConcurrentHashMap<>();
+    private GuanacoTelemetryListener telemetryListener;
     
     /**
      * Creates a new context that will scan {@code basePackage} for
@@ -68,6 +70,40 @@ public class GuanacoContext extends SpringCamelContext {
         this.configLoader = new ConfigLoader();
         this.inspector = new TopologyInspector();
         this.setApplicationContext(new StaticApplicationContext());
+    }
+    
+   /**
+     * Registers a {@link GuanacoTelemetryListener} to export execution, EIP, and dispatch events.
+     *
+     * <p>This component is optional. If no listener is registered prior to calling
+     * {@code wireRoutes()}, telemetry interception is short-circuited at boot time with zero
+     * runtime execution overhead.
+     *
+     * <p>To register multiple listeners, construct a composite implementation:
+     * <pre>{@code
+     * public record DualTelemetryListener(
+     *     GuanacoTelemetryListener primary,
+     *     GuanacoTelemetryListener secondary
+     * ) implements GuanacoTelemetryListener {
+     *     @Override
+     *     public void onOutcomeFailed(String routeId, String targetUri, Throwable cause) {
+     *         primary.onOutcomeFailed(routeId, targetUri, cause);
+     *         secondary.onOutcomeFailed(routeId, targetUri, cause);
+     *     }
+     *     // ...
+     * }
+     * }</pre>
+     *
+     * <p>You can supply a custom listener or use {@code GuanacoMicrometerListener} from
+     * the optional {@code guanaco-telemetry} module.
+     *
+     * @param telemetryListener the {@link GuanacoTelemetryListener} instance to register
+     */
+    public void registerTelemetryListener(GuanacoTelemetryListener telemetryListener){
+        if (telemetryListener == null){
+            throw new IllegalArgumentException("GuanacoTelemetryListener instance must not be null.");
+        }
+        this.telemetryListener = telemetryListener;
     }
 
     /**
@@ -161,7 +197,7 @@ public class GuanacoContext extends SpringCamelContext {
         RouteOutcomeRegistry outcomeRegistry = RouteOutcomeRegistry.scan(basePackage);
 
         GuanacoRuntimeContext runtimeContext = new GuanacoRuntimeContext(
-                outcomeRegistry, Map.copyOf(aggregationStrategies), Map.copyOf(delayStrategies));
+                outcomeRegistry, Map.copyOf(aggregationStrategies), Map.copyOf(delayStrategies), telemetryListener);
 
         Reflections reflections = new Reflections(basePackage);
         Set<Class<?>> rawProcessorClasses = reflections.getTypesAnnotatedWith(GuanacoRoute.class);

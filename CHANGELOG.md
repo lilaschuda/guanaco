@@ -6,6 +6,13 @@ this project follows Semantic Versioning: the public API and behavioral
 guarantees documented in `ROADMAP.md`'s "v1.0 API freeze" section will not
 change without a major version bump.
 
+## [1.1.0] -  in progress
+feat(telemetry): wire telemetry listener into engine routes and resilience handlers
+- Add optional boot-time short-circuiting telemetry hooks to GuanacoRouteBuilder
+- Instrument Idempotent, Resequence, Aggregate, Delayer, and Dispatch operations
+- Support telemetry timing and failure logging in GuanacoResilienceHelper with R4J exception re-throwing
+- Clean up registerTelemetryListener API on GuanacoContext and update Javadoc
+
 ## [1.0.0]
 
 First stable, tagged release. Everything from `0.1.0` through `0.11.0` was

@@ -1,0 +1,230 @@
+diff --git a/guanaco-core/src/main/java/io/github/lilaschuda/guanaco/context/GuanacoRouteBuilder.java b/guanaco-core/src/main/java/io/github/lilaschuda/guanaco/context/GuanacoRouteBuilder.java
+index 9f4f64a..1d1d8c2 100644
+--- a/guanaco-core/src/main/java/io/github/lilaschuda/guanaco/context/GuanacoRouteBuilder.java
++++ b/guanaco-core/src/main/java/io/github/lilaschuda/guanaco/context/GuanacoRouteBuilder.java
+@@ -194,9 +194,24 @@ class GuanacoRouteBuilder extends RouteBuilder {
+             }
+         }
+ 
++        if (runtimeContext.telemetryListener() != null) {
++            // The rejected=true side is handled at the route level in
++            // configure() via onException(MessageRejectedException.class),
++            // since Camel throws that exception out of the resequencer node
++            // itself, before any .process() chained here would run. This is
++            // the complementary rejected=false side: every message that
++            // makes it through resequencing to this point is reported as
++            // processed.
++            return resequence.process(this::recordResequenceProcessed);
++        }
++
+         return resequence;
+     }
+ 
++    private void recordResequenceProcessed(Exchange exchange) {
++        runtimeContext.telemetryListener().onResequenceEvent(processorName, false);
++    }
++
+     @SuppressWarnings({"unchecked", "rawtypes"})
+     private ProcessorDefinition wireAggregate(ProcessorDefinition parent, GuanacoAggregateConfig aggConfig) {
+         AggregationStrategy strategy = runtimeContext.aggregationStrategies().get(aggConfig.getStrategyRef());
+@@ -396,7 +411,7 @@ class GuanacoRouteBuilder extends RouteBuilder {
+         Exchange child = producerTemplate.getCamelContext().getEndpoint(endpoint).createExchange();
+         child.getIn().setBody(destination.body());
+         
+-        long startTime = runtimeContext.telemetryListener() != null ? startTime=System.currentTimeMillis() : 0;
++        long startTime = runtimeContext.telemetryListener() != null ? System.currentTimeMillis() : 0;
+         
+         Exception failure = null;
+         try {
+@@ -571,6 +586,21 @@ class GuanacoRouteBuilder extends RouteBuilder {
+                     .process(exchange -> {
+                         Throwable cause = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Throwable.class);
+                         runtimeContext.telemetryListener().onOutcomeFailed(processorName, uri, cause);
++
++                        // doCatch always marks the exception EXCEPTION_HANDLED and clears
++                        // exchange.getException() -- unlike onException(), it has no
++                        // .handled(...) option to opt out of that. Without this rethrow,
++                        // a dispatch failure would be recorded correctly but then silently
++                        // treated as delivered: never redelivered, never dead-lettered.
++                        // Mirrors the rethrow GuanacoResilienceHelper.applyCircuitBreaker
++                        // already does for the same reason.
++                        if (cause instanceof Exception e) {
++                            throw e;
++                        } else if (cause instanceof Error err) {
++                            throw err;
++                        } else if (cause != null) {
++                            throw new RuntimeException(cause);
++                        }
+                     })
+                     .end();
+         }
+diff --git a/guanaco-core/src/test/java/io/github/lilaschuda/guanaco/context/GuanacoRouteBuilderResequenceTelemetryTest.java b/guanaco-core/src/test/java/io/github/lilaschuda/guanaco/context/GuanacoRouteBuilderResequenceTelemetryTest.java
+new file mode 100644
+index 0000000..dd9d61f
+--- /dev/null
++++ b/guanaco-core/src/test/java/io/github/lilaschuda/guanaco/context/GuanacoRouteBuilderResequenceTelemetryTest.java
+@@ -0,0 +1,71 @@
++package io.github.lilaschuda.guanaco.context;
++
++import io.github.lilaschuda.guanaco.api.RouteOutcome;
++import io.github.lilaschuda.guanaco.config.GuanacoResequenceConfig;
++import io.github.lilaschuda.guanaco.config.RouteConfig;
++import io.github.lilaschuda.guanaco.api.Processor;
++import io.github.lilaschuda.guanaco.api.telemetry.GuanacoTelemetryListener;
++import org.apache.camel.ProducerTemplate;
++import org.apache.camel.component.mock.MockEndpoint;
++import org.junit.jupiter.api.Test;
++
++import java.util.List;
++import java.util.Map;
++import java.util.concurrent.CopyOnWriteArrayList;
++
++import static org.assertj.core.api.Assertions.assertThat;
++
++/**
++ * Proves the previously-missing rejected=false side of resequence telemetry
++ * (added alongside the rejected=true route-level {@code onException}
++ * handling that already existed) actually fires, once per message that
++ * makes it through resequencing.
++ */
++class GuanacoRouteBuilderResequenceTelemetryTest extends GuanacoRouteBuilderTestSupport {
++
++    sealed interface OrderRoute<T> extends RouteOutcome<T> permits ToOrdered {}
++    record ToOrdered(String body) implements OrderRoute<String> {}
++
++    @SuppressWarnings("unchecked")
++    private static final Class<? extends RouteOutcome<?>> ORDER_ROUTE_CLASS =
++            (Class<? extends RouteOutcome<?>>) (Class<?>) OrderRoute.class;
++
++    private static class RecordingTelemetryListener implements GuanacoTelemetryListener {
++        final List<Boolean> resequenceEvents = new CopyOnWriteArrayList<>();
++
++        @Override
++        public void onResequenceEvent(String routeId, boolean rejected) {
++            resequenceEvents.add(rejected);
++        }
++    }
++
++    @Test
++    void batchMode_reportsProcessedForEveryMessage() throws Exception {
++        RouteOutcomeRegistry registry = RouteOutcomeRegistryTestSupport.of(ToOrdered.class);
++
++        RouteConfig config = routeConfig("direct:orders", Map.of("ToOrdered", "mock:ordered"));
++        GuanacoResequenceConfig reseq = new GuanacoResequenceConfig();
++        reseq.setSequenceHeader("seq");
++        reseq.setMode(GuanacoResequenceConfig.Mode.BATCH);
++        reseq.setCapacity(3);
++        config.setResequence(reseq);
++
++        Processor<RouteOutcome<?>> processor = exchange -> new ToOrdered(exchange.getIn().getBody(String.class));
++        RecordingTelemetryListener listener = new RecordingTelemetryListener();
++
++        registerRoute(processor, ORDER_ROUTE_CLASS, config, "ResequenceTelemetryTest",
++                new GuanacoRuntimeContext(registry, Map.of(), Map.of(), listener));
++        context.start();
++
++        MockEndpoint ordered = context.getEndpoint("mock:ordered", MockEndpoint.class);
++        ordered.expectedMessageCount(3);
++
++        ProducerTemplate producer = context.createProducerTemplate();
++        producer.send("direct:orders", e -> { e.getIn().setHeader("seq", 2); e.getIn().setBody("B"); });
++        producer.send("direct:orders", e -> { e.getIn().setHeader("seq", 1); e.getIn().setBody("A"); });
++        producer.send("direct:orders", e -> { e.getIn().setHeader("seq", 3); e.getIn().setBody("C"); });
++
++        MockEndpoint.assertIsSatisfied(ordered);
++        assertThat(listener.resequenceEvents).hasSize(3).allMatch(rejected -> !rejected);
++    }
++}
+diff --git a/guanaco-core/src/test/java/io/github/lilaschuda/guanaco/context/GuanacoRouteBuilderTelemetryFailureTest.java b/guanaco-core/src/test/java/io/github/lilaschuda/guanaco/context/GuanacoRouteBuilderTelemetryFailureTest.java
+new file mode 100644
+index 0000000..e3bf53e
+--- /dev/null
++++ b/guanaco-core/src/test/java/io/github/lilaschuda/guanaco/context/GuanacoRouteBuilderTelemetryFailureTest.java
+@@ -0,0 +1,76 @@
++package io.github.lilaschuda.guanaco.context;
++
++import io.github.lilaschuda.guanaco.api.RouteOutcome;
++import io.github.lilaschuda.guanaco.config.RouteConfig;
++import io.github.lilaschuda.guanaco.api.Processor;
++import io.github.lilaschuda.guanaco.api.telemetry.GuanacoTelemetryListener;
++import org.apache.camel.component.mock.MockEndpoint;
++import org.junit.jupiter.api.Test;
++
++import java.util.Map;
++import java.util.concurrent.CopyOnWriteArrayList;
++import java.util.List;
++
++import static org.assertj.core.api.Assertions.assertThat;
++
++/**
++ * Regression test for a real bug found during review: {@code attachPlainTo}'s
++ * telemetry-enabled path used {@code doCatch(Throwable.class)} to record
++ * {@code onOutcomeFailed}, but never rethrew afterward. Unlike top-level
++ * {@code onException()}, Camel's {@code doCatch} has no {@code .handled(...)}
++ * opt-out — it unconditionally marks the exchange's exception handled and
++ * clears it (see {@code org.apache.camel.processor.CatchProcessor}). Without
++ * a rethrow, a dispatch failure was recorded correctly by telemetry but then
++ * silently treated as delivered: it never reached the dead-letter channel
++ * and was never redelivered. This test proves the fix (rethrow after
++ * recording, mirroring what {@code GuanacoResilienceHelper} already did for
++ * the circuit-breaker path) restores the pre-telemetry behavior exactly.
++ */
++class GuanacoRouteBuilderTelemetryFailureTest extends GuanacoRouteBuilderTestSupport {
++
++    sealed interface OrderRoute<T> extends RouteOutcome<T> permits ToMerged {}
++    record ToMerged(String body) implements OrderRoute<String> {}
++
++    @SuppressWarnings("unchecked")
++    private static final Class<? extends RouteOutcome<?>> ORDER_ROUTE_CLASS =
++            (Class<? extends RouteOutcome<?>>) (Class<?>) OrderRoute.class;
++
++    private static class RecordingTelemetryListener implements GuanacoTelemetryListener {
++        final List<String> failures = new CopyOnWriteArrayList<>();
++
++        @Override
++        public void onOutcomeFailed(String routeId, String targetUri, Throwable cause) {
++            failures.add(routeId + ":" + targetUri + ":" + cause.getClass().getSimpleName());
++        }
++    }
++
++    @Test
++    void dispatchFailure_withTelemetryEnabled_stillReachesDeadLetter_andReportsFailure() throws Exception {
++        RouteOutcomeRegistry registry = RouteOutcomeRegistryTestSupport.of(ToMerged.class);
++        RouteConfig config = routeConfigWithDeadLetter(
++                "direct:orders", Map.of("ToMerged", "mock:bad"), "mock:dead");
++
++        Processor<RouteOutcome<?>> processor = exchange -> new ToMerged(exchange.getIn().getBody(String.class));
++        RecordingTelemetryListener listener = new RecordingTelemetryListener();
++
++        registerRoute(processor, ORDER_ROUTE_CLASS, config, "DispatchFailureTelemetryTest",
++                new GuanacoRuntimeContext(registry, Map.of(), Map.of(), listener));
++        context.start();
++
++        MockEndpoint bad = context.getEndpoint("mock:bad", MockEndpoint.class);
++        bad.whenAnyExchangeReceived(exchange -> {
++            throw new IllegalStateException("simulated downstream failure");
++        });
++
++        MockEndpoint dead = context.getEndpoint("mock:dead", MockEndpoint.class);
++        dead.expectedMessageCount(1);
++
++        context.createProducerTemplate().sendBody("direct:orders", "hello");
++
++        // Before the fix: this never received anything -- doCatch silently
++        // absorbed the failure and the exchange was treated as delivered.
++        MockEndpoint.assertIsSatisfied(dead);
++        assertThat(listener.failures())
++                .anyMatch(f -> f.startsWith("DispatchFailureTelemetryTest:mock:bad:IllegalStateException"));
++    }
++}
+diff --git a/guanaco-telemetry/src/test/java/io/github/lilaschuda/guanaco/telemetry/micrometer/GuanacoMicrometerListenerTest.java b/guanaco-telemetry/src/test/java/io/github/lilaschuda/guanaco/telemetry/micrometer/GuanacoMicrometerListenerTest.java
+index ffd7cf0..cd9c05d 100644
+--- a/guanaco-telemetry/src/test/java/io/github/lilaschuda/guanaco/telemetry/micrometer/GuanacoMicrometerListenerTest.java
++++ b/guanaco-telemetry/src/test/java/io/github/lilaschuda/guanaco/telemetry/micrometer/GuanacoMicrometerListenerTest.java
+@@ -1,5 +1,5 @@
++package io.github.lilaschuda.guanaco.telemetry.micrometer;
+ 
+-import io.github.lilaschuda.guanaco.telemetry.micrometer.GuanacoMicrometerListener;
+ import io.micrometer.core.instrument.Counter;
+ import io.micrometer.core.instrument.Timer;
+ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;

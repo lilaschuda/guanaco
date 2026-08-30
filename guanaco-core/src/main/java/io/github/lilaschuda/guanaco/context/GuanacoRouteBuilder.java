@@ -78,6 +78,13 @@ class GuanacoRouteBuilder extends RouteBuilder {
         producerTemplate = getContext().createProducerTemplate();
         configureErrorHandler();
 
+        // Boot-time short circuit for resequence rejections
+        if (runtimeContext.telemetryListener() != null) {
+            onException(org.apache.camel.processor.resequencer.MessageRejectedException.class)
+                .handled(false)
+                .process(exchange -> runtimeContext.telemetryListener().onResequenceEvent(processorName, true));
+        }
+        
         RouteDefinition route = from(config.getFrom())
                 .routeId("guanaco-" + processorName);
 
@@ -138,6 +145,23 @@ class GuanacoRouteBuilder extends RouteBuilder {
         IdempotentRepository repository = new LoggingIdempotentRepository(
                 memoryRepo, processorName, idempotentConfig.getMessageIdHeader());
 
+        if (runtimeContext.telemetryListener() != null) {
+            IdempotentRepository delegate = repository;
+            repository = new IdempotentRepository() {
+                @Override public boolean add(String key) {
+                    boolean isNew = delegate.add(key);
+                    runtimeContext.telemetryListener().onIdempotentEvaluation(processorName, key, !isNew);
+                    return isNew;
+                }
+                @Override public boolean contains(String key) { return delegate.contains(key); }
+                @Override public boolean remove(String key) { return delegate.remove(key); }
+                @Override public boolean confirm(String key) { return delegate.confirm(key); }
+                @Override public void clear() { delegate.clear(); }
+                @Override public void start() { delegate.start(); }
+                @Override public void stop() { delegate.stop(); }
+            };
+        }
+        
         return parent.idempotentConsumer(header(idempotentConfig.getMessageIdHeader()), repository)
                 .eager(idempotentConfig.resolveEager())
                 .removeOnFailure(idempotentConfig.resolveRemoveOnFailure())
@@ -170,7 +194,22 @@ class GuanacoRouteBuilder extends RouteBuilder {
             }
         }
 
+        if (runtimeContext.telemetryListener() != null) {
+            // The rejected=true side is handled at the route level in
+            // configure() via onException(MessageRejectedException.class),
+            // since Camel throws that exception out of the resequencer node
+            // itself, before any .process() chained here would run. This is
+            // the complementary rejected=false side: every message that
+            // makes it through resequencing to this point is reported as
+            // processed.
+            return resequence.process(this::recordResequenceProcessed);
+        }
+
         return resequence;
+    }
+
+    private void recordResequenceProcessed(Exchange exchange) {
+        runtimeContext.telemetryListener().onResequenceEvent(processorName, false);
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -185,6 +224,25 @@ class GuanacoRouteBuilder extends RouteBuilder {
                     "\", ...) before calling wireRoutes().");
         }
 
+        if (runtimeContext.telemetryListener() != null) {
+            AggregationStrategy delegate = strategy;
+            strategy = new AggregationStrategy() {
+                @Override
+                public Exchange aggregate(Exchange oldExchange, Exchange newExchange) {
+                    return delegate.aggregate(oldExchange, newExchange);
+                }
+
+                @Override
+                public void onCompletion(Exchange exchange) {
+                    if (exchange != null) {
+                        String reason = exchange.getProperty(Exchange.AGGREGATED_COMPLETED_BY, String.class);
+                        runtimeContext.telemetryListener().onAggregateComplete(processorName, reason != null ? reason : "completed");
+                    }
+                    delegate.onCompletion(exchange);
+                }
+            };
+        }
+        
         log.info("[{}] Wiring Aggregate — correlationHeader='{}', strategyRef='{}', " +
                 "completionSize={}, completionTimeoutMs={}",
                 processorName, aggConfig.getCorrelationHeader(), aggConfig.getStrategyRef(),
@@ -352,7 +410,9 @@ class GuanacoRouteBuilder extends RouteBuilder {
 
         Exchange child = producerTemplate.getCamelContext().getEndpoint(endpoint).createExchange();
         child.getIn().setBody(destination.body());
-
+        
+        long startTime = runtimeContext.telemetryListener() != null ? System.currentTimeMillis() : 0;
+        
         Exception failure = null;
         try {
             producerTemplate.send(endpoint, child);
@@ -361,6 +421,16 @@ class GuanacoRouteBuilder extends RouteBuilder {
             failure = e;
         }
 
+        if (runtimeContext.telemetryListener() != null) {
+            if (failure != null) {
+                runtimeContext.telemetryListener().onOutcomeFailed(processorName, endpoint, failure);
+            } else {
+                long duration = System.currentTimeMillis() - startTime;
+                String outcomeType = destination.getClass().getSimpleName();
+                runtimeContext.telemetryListener().onOutcomeDispatched(processorName, outcomeType, endpoint, duration);
+            }
+        }
+        
         if (failure == null) {
             return true;
         }
@@ -422,7 +492,7 @@ class GuanacoRouteBuilder extends RouteBuilder {
             GuanacoThrottlerConfig throttler = config.resolveThrottlerFor(target);
             GuanacoDelayerConfig delayer = config.resolveDelayerFor(target);
             GuanacoCircuitBreakerConfig cb = config.resolveCircuitBreakerFor(target);
-
+            
             ChoiceDefinition branch = choice.when(exchange -> outcomeClass.isInstance(exchange.getProperty(OUTCOME_PROPERTY)));
 
             ProcessorDefinition<?> parent = branch;
@@ -436,15 +506,15 @@ class GuanacoRouteBuilder extends RouteBuilder {
 
             if (delayer != null) {
                 log.info("[{}] Bound {} → {} (delayed)", processorName, outcomeName, target.getUri());
-                parent = applyDelay(parent, delayer);
+                parent = applyDelay(parent, delayer, target.getUri());
             }
 
             if (cb != null) {
                 log.info("[{}] Bound {} → {} (circuit breaker enabled)", processorName, outcomeName, target.getUri());
-                GuanacoResilienceHelper.applyCircuitBreaker(parent, target.getUri(), cb);
+                GuanacoResilienceHelper.applyCircuitBreaker(parent, target.getUri(), cb, runtimeContext.telemetryListener(), processorName, outcomeName);
             } else {
                 log.info("[{}] Bound {} → {}", processorName, outcomeName, target.getUri());
-                attachPlainTo(parent, target.getUri());
+                attachPlainTo(parent, target.getUri(), outcomeName);
             }
         } else {
             List<String> uris = targets.stream().map(BindingTarget::getUri).toList();
@@ -491,20 +561,52 @@ class GuanacoRouteBuilder extends RouteBuilder {
         return throttle;
     }
     
-    private void attachPlainTo(ProcessorDefinition<?> parent, String uri) {
-        if (parent instanceof ChoiceDefinition branch) {
-            branch.to(uri);
-        } else if (parent instanceof ThrottleDefinition throttle) {
-            throttle.to(uri);
-        } else if (parent instanceof DelayDefinition delay) {
-            delay.to(uri);
+    private void attachPlainTo(ProcessorDefinition<?> parent, String uri, String outcomeName) {
+        if (runtimeContext.telemetryListener() == null) {
+            if (parent instanceof ChoiceDefinition branch) {
+                branch.to(uri);
+            } else if (parent instanceof ThrottleDefinition throttle) {
+                throttle.to(uri);
+            } else if (parent instanceof DelayDefinition delay) {
+                delay.to(uri);
+            } else {
+                throw new GuanacoRouteBuilderException(
+                        "[" + processorName + "] Unexpected parent definition type: " + parent.getClass());
+            }
         } else {
-            throw new GuanacoRouteBuilderException(
-                    "[" + processorName + "] Unexpected parent definition type: " + parent.getClass());
+            parent.doTry()
+                    .process(exchange -> exchange.setProperty("Guanaco_Start_" + uri, System.currentTimeMillis()))
+                    .to(uri)
+                    .process(exchange -> {
+                        Long start = exchange.getProperty("Guanaco_Start_" + uri, Long.class);
+                        long duration = start != null ? System.currentTimeMillis() - start : 0;
+                        runtimeContext.telemetryListener().onOutcomeDispatched(processorName, outcomeName, uri, duration);
+                    })
+                    .doCatch(Throwable.class)
+                    .process(exchange -> {
+                        Throwable cause = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Throwable.class);
+                        runtimeContext.telemetryListener().onOutcomeFailed(processorName, uri, cause);
+
+                        // doCatch always marks the exception EXCEPTION_HANDLED and clears
+                        // exchange.getException() -- unlike onException(), it has no
+                        // .handled(...) option to opt out of that. Without this rethrow,
+                        // a dispatch failure would be recorded correctly but then silently
+                        // treated as delivered: never redelivered, never dead-lettered.
+                        // Mirrors the rethrow GuanacoResilienceHelper.applyCircuitBreaker
+                        // already does for the same reason.
+                        if (cause instanceof Exception e) {
+                            throw e;
+                        } else if (cause instanceof Error err) {
+                            throw err;
+                        } else if (cause != null) {
+                            throw new RuntimeException(cause);
+                        }
+                    })
+                    .end();
         }
     }
 
-    private DelayDefinition applyDelay(ProcessorDefinition<?> parent, GuanacoDelayerConfig delayerConfig) {
+    private DelayDefinition applyDelay(ProcessorDefinition<?> parent, GuanacoDelayerConfig delayerConfig, String targetUri) {
         Expression delayExpression;
 
         if (delayerConfig.getDelayStrategyRef() != null) {
@@ -526,6 +628,20 @@ class GuanacoRouteBuilder extends RouteBuilder {
             delayExpression = constant(delayerConfig.getDelayMs());
         }
 
+        if (runtimeContext.telemetryListener() != null) {
+            Expression delegate = delayExpression;
+            delayExpression = new Expression() {
+                @Override
+                public <T> T evaluate(Exchange exchange, Class<T> type) {
+                    Long delayMs = delegate.evaluate(exchange, Long.class);
+                    if (delayMs != null && delayMs > 0) {
+                        runtimeContext.telemetryListener().onDelayApplied(processorName, targetUri, delayMs);
+                    }
+                    return type.cast(delayMs);
+                }
+            };
+        }
+        
         DelayDefinition delay = parent.delay(delayExpression);
 
         if (delayerConfig.resolveAsyncDelayed()) {

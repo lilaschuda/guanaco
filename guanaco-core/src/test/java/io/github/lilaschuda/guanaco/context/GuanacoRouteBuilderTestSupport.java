@@ -1,7 +1,5 @@
 package io.github.lilaschuda.guanaco.context;
 
-import io.github.lilaschuda.guanaco.context.GuanacoRuntimeContext;
-import io.github.lilaschuda.guanaco.context.GuanacoRouteBuilder;
 import io.github.lilaschuda.guanaco.context.RouteOutcomeRegistry;
 import io.github.lilaschuda.guanaco.api.GuanacoDelayStrategy;
 import io.github.lilaschuda.guanaco.api.RouteOutcome;
@@ -44,7 +42,7 @@ public abstract class GuanacoRouteBuilderTestSupport {
         String processorName,
         RouteOutcomeRegistry registry) throws Exception {
     registerRoute(processor, routeInterface, config, processorName,
-            new GuanacoRuntimeContext(registry, Map.of(), Map.of()));
+            new GuanacoRuntimeContext(registry, Map.of(), Map.of(), null));
 }
 
     protected void registerRoute(
@@ -56,7 +54,7 @@ public abstract class GuanacoRouteBuilderTestSupport {
             Map<String, AggregationStrategy> aggregationStrategies,
             Map<String, GuanacoDelayStrategy> delayStrategies) throws Exception {
         registerRoute(processor, routeInterface, config, processorName,
-                new GuanacoRuntimeContext(registry, aggregationStrategies, delayStrategies));
+                new GuanacoRuntimeContext(registry, aggregationStrategies, delayStrategies, null));
     }
 
     protected void registerRoute(
@@ -75,7 +73,7 @@ public abstract class GuanacoRouteBuilderTestSupport {
             String processorName,
             RouteOutcomeRegistry registry) throws Exception {
         registerRoute(processor, ROUTE_OUTCOME_CLASS, config, processorName,
-                new GuanacoRuntimeContext(registry, Map.of(), Map.of()));
+                new GuanacoRuntimeContext(registry, Map.of(), Map.of(), null));
     }
 
     /**

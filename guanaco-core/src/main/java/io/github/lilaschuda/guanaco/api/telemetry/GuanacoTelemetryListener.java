@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.api.telemetry;
 
+import java.util.List;
+
 /**
  * Event listener for tracking execution metrics, EIP operations, and fault tolerance events.
  *
@@ -61,4 +63,11 @@ public interface GuanacoTelemetryListener {
      * @param cause underlying exception
      */
     default void onOutcomeFailed(String routeId, String targetUri, Throwable cause) {}
+    
+    /**
+     * Returns a snapshot of recent failure records captured by this listener.
+     *
+     * @return an unmodifiable list of recent failure records
+     */
+    List<FailureRecord> recentFailures();
 }

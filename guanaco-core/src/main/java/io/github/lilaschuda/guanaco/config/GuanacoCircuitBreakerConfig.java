@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.config;
 
+import java.util.Map;
+
 /**
  * Circuit breaker policy — declarable at route level (default for every
  * binding on that route) or per-binding (overrides the route default for
@@ -24,6 +26,7 @@ public class GuanacoCircuitBreakerConfig {
     private Integer minimumNumberOfCalls;
     private Integer failureRateThreshold;
     private Long waitDurationInOpenStateMs;
+    private Map<String, Object> extra;
 
     /** Default constructor, used by Jackson when deserializing a circuit breaker block. */
     public GuanacoCircuitBreakerConfig() { }
@@ -73,6 +76,44 @@ public class GuanacoCircuitBreakerConfig {
      */
     public Integer getSlidingWindowSize() { return slidingWindowSize; }
 
+    /**
+     * Gets optional extra key-value properties to configure advanced Resilience4j options.
+     *
+     * <p>Properties in this map are dynamically bound to the underlying
+     * {@code Resilience4jConfigurationDefinition} at route assembly time using Apache Camel's
+     * property binding mechanism.
+     *
+     * <p>Example YAML configuration:
+     * <pre>{@code
+     * bindings:
+     *   OrderProcessed:
+     *     - uri: "http://shipping-service/api"
+     *       circuitBreaker:
+     *         failureRateThreshold: 50
+     *         waitDurationInOpenStateMs: 5000
+     *         extra:
+     *           permittedNumberOfCallsInHalfOpenState: 5
+     *           slowCallRateThreshold: 30
+     *           slowCallDurationThresholdMs: 2000
+     *           writableStackTraceEnabled: false
+     * }</pre>
+     *
+     * @return a map of additional property names and their values, or {@code null} if unconfigured
+     */
+    public Map<String, Object> getExtra() { return extra; }
+    
+    
+    /**
+     * Sets optional extra key-value properties to configure advanced Resilience4j options.
+     * 
+     * @param extra a map of additional Resilience4j properties; see {@link #getExtra()}
+     *              for configuration structure and YAML examples
+     * @see #getExtra()
+     */
+    public void setExtra(Map<String, Object> extra){
+        this.extra = extra;
+    }
+    
     /**
      * Sets the Resilience4j sliding window size.
      *
