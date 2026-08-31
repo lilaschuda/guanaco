@@ -22,11 +22,13 @@ change without a major version bump.
 - **DSL Choice Block Nesting**: Explicitly closed choice definitions with `.end()` 
   in `GuanacoRouteBuilder` to prevent route hierarchy ambiguities.
 
-feat(telemetry): wire telemetry listener into engine routes and resilience handlers
-- Add optional boot-time short-circuiting telemetry hooks to GuanacoRouteBuilder
-- Instrument Idempotent, Resequence, Aggregate, Delayer, and Dispatch operations
-- Support telemetry timing and failure logging in GuanacoResilienceHelper with R4J exception re-throwing
-- Clean up registerTelemetryListener API on GuanacoContext and update Javadoc
+### Changed
+- **Telemetry engine wiring**: Instrumented Idempotent, Resequence, Aggregate,
+  Delayer, and Dispatch operations, with optional boot-time short-circuiting
+  hooks in `GuanacoRouteBuilder` so an unregistered listener costs nothing.
+  `GuanacoResilienceHelper` reports circuit-breaker timing/failures with the
+  real R4J exception re-thrown afterward. Cleaned up the
+  `registerTelemetryListener` API on `GuanacoContext` and its Javadoc.
 
 ## [1.0.0]
 

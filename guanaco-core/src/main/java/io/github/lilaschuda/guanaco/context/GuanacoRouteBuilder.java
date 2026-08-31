@@ -405,12 +405,13 @@ class GuanacoRouteBuilder extends RouteBuilder {
 
     /**
      * Unconditional SLF4J baseline for a Wire Tap failure, plus telemetry
-     * when a listener is registered. Never rethrows -- .handled(false) on
-     * the onException clause that invokes this already lets the exception
-     * continue exactly as Camel's own default (unconfigured) handling of
-     * an async wireTap failure would; this process() only adds our own
-     * logging/telemetry on top, it doesn't change what happens to the
-     * exception afterward.
+     * when a listener is registered. The onException clause that invokes
+     * this uses .handled(true) -- after this runs, the exchange is
+     * considered successfully processed and the exception goes no further:
+     * no redelivery, no dead-letter channel. That's deliberate, not an
+     * oversight -- per the original design, Wire Tap failures rely
+     * entirely on this logging/telemetry, never on the main route's error
+     * handling, so a tapped failure never contaminates the main flow's DLQ.
      */
     private void recordWireTapFailure(Exchange exchange) {
         Throwable cause = exchange.getException();
