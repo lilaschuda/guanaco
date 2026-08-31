@@ -7,6 +7,21 @@ guarantees documented in `ROADMAP.md`'s "v1.0 API freeze" section will not
 change without a major version bump.
 
 ## [1.1.0] -  in progress
+
+### Added
+- **Wire-Tap Routing**: Support for asynchronous wire-tapping with isolated 
+  execution and telemetry logging.
+- **Wire-Tap Test Suite**: Unit tests verifying primary message delivery, 
+  failure logging, and DLQ non-contamination under failure scenarios.
+
+### Fixed
+- **Wire-Tap DLQ Leak**: Handled background wire-tap exceptions (`.handled(true)`) to isolate 
+  side-channel failures from the main route's Dead Letter Channel.
+- **Simple Expression Property Lookup**: Switched to bracket notation `${exchangeProperty[...]}` 
+  in dynamic URIs to prevent OGNL method navigation conflicts.
+- **DSL Choice Block Nesting**: Explicitly closed choice definitions with `.end()` 
+  in `GuanacoRouteBuilder` to prevent route hierarchy ambiguities.
+
 feat(telemetry): wire telemetry listener into engine routes and resilience handlers
 - Add optional boot-time short-circuiting telemetry hooks to GuanacoRouteBuilder
 - Instrument Idempotent, Resequence, Aggregate, Delayer, and Dispatch operations

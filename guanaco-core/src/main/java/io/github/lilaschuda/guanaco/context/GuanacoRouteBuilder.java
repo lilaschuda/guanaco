@@ -15,6 +15,7 @@ import io.github.lilaschuda.guanaco.api.Processor;
 import io.github.lilaschuda.guanaco.api.Drop;
 import io.github.lilaschuda.guanaco.api.Multicast;
 import io.github.lilaschuda.guanaco.api.Split;
+import io.github.lilaschuda.guanaco.api.WireTap;
 import org.apache.camel.AggregationStrategy;
 import org.apache.camel.Exchange;
 import org.apache.camel.Expression;
@@ -42,7 +43,35 @@ class GuanacoRouteBuilder extends RouteBuilder {
 
     private static final Logger log = LoggerFactory.getLogger(GuanacoRouteBuilder.class);
     static final String OUTCOME_PROPERTY = "guanaco.outcome";
+    
+    /**
+     * Set by {@link #dispatchOutcome} when the outcome was a {@link WireTap}
+     * wrapper, to the tap's own resolved binding URI. Read by the dynamic
+     * {@code wireTap()} DSL step in {@link #configure()}. Absent (never set)
+     * when the outcome isn't tapped -- {@link #hasPendingTap} is the guard
+     * that keeps the wireTap step a genuine no-op in that case.
+     */
+    private static final String TAP_TARGET_PROPERTY = "guanaco.wireTap.targetUri";
 
+    /**
+     * Set alongside TAP_TARGET_PROPERTY to the tap outcome's own body.
+     * Needed because the copy Camel's wireTap() creates inherits the
+     * PRIMARY's body via shallow exchange.copy() (properties included) --
+     * {@link #prepareTapCopy} overwrites it with this, on the copy only.
+     */
+    private static final String TAP_BODY_PROPERTY = "guanaco.wireTap.tapBody";
+
+    /**
+     * Set only on the tapped COPY exchange (via {@code onPrepare}, which runs
+     * on the copy, never the original) so the route-scoped
+     * {@code onException(Throwable.class)} handler in {@link #configure()}
+     * can tell a tap failure apart from an ordinary main-flow dispatch
+     * failure and only act on the former -- the ordinary dispatch paths
+     * already have their own telemetry/dead-letter handling and must not be
+     * double-logged or double-reported here.
+     */
+    private static final String TAP_MARKER_PROPERTY = "guanaco.wireTap.isTapCopy";
+    
     private final Processor<? extends RouteOutcome<?>> processor;
     private final Class<? extends RouteOutcome<?>> routeInterface;
     private final RouteConfig config;
@@ -78,6 +107,21 @@ class GuanacoRouteBuilder extends RouteBuilder {
         producerTemplate = getContext().createProducerTemplate();
         configureErrorHandler();
 
+        // Wire Tap failures are strictly isolated to their own async thread
+        // and never propagate to the main flow (see the wireTap() step
+        // below). This route-scoped handler is how their failure surfaces
+        // at all: unconditional SLF4J logging always, plus telemetry when a
+        // listener is registered. Guarded by TAP_MARKER_PROPERTY so ordinary
+        // main-flow dispatch failures (which already have their own
+        // doFinally-based telemetry/dead-letter handling) are never
+        // double-handled here. Registered unconditionally -- unlike the
+        // resequence/dispatch telemetry hooks -- because the SLF4J logging
+        // must happen even with no GuanacoTelemetryListener registered.
+        onException(Throwable.class)
+                .onWhen(exchange -> exchange.getProperty(TAP_MARKER_PROPERTY) != null)
+                .handled(true)
+                .process(this::recordWireTapFailure);
+
         // Boot-time short circuit for resequence rejections
         if (runtimeContext.telemetryListener() != null) {
             onException(org.apache.camel.processor.resequencer.MessageRejectedException.class)
@@ -104,6 +148,22 @@ class GuanacoRouteBuilder extends RouteBuilder {
         }
 
         ProcessorDefinition<?> afterProcess = pipeline.process(this::dispatchOutcome);
+
+        // If dispatchOutcome found a WireTap wrapper, it stashed the tap's
+        // resolved target URI in TAP_TARGET_PROPERTY and unwrapped
+        // OUTCOME_PROPERTY down to the primary outcome -- so everything
+        // below this point (the choice table, bindings, delay/circuit
+        // breaker/throttle) dispatches the primary exactly as if it had
+        // been returned directly, with no knowledge that a tap happened.
+        // hasPendingTap guards this into a genuine no-op the rest of the
+        // time: an untapped message never touches the wireTap() DSL step
+        // at all, not even to evaluate a dynamic URI against nothing.
+        afterProcess.choice()
+                .when(this::hasPendingTap)
+                    .wireTap("${exchangeProperty[" + TAP_TARGET_PROPERTY + "]}")
+                        .dynamicUri(true)
+                        .onPrepare(this::prepareTapCopy)
+                .end();
 
         ChoiceDefinition choice = afterProcess.choice();
 
@@ -269,6 +329,11 @@ class GuanacoRouteBuilder extends RouteBuilder {
                     "Use Drop.INSTANCE to explicitly discard a message.");
         }
 
+        if (outcome instanceof WireTap<?> wireTap) {
+            resolveTapTarget(exchange, wireTap.tap());
+            outcome = wireTap.primary();
+        }
+
         log.debug("[{}] Routing outcome: {}", processorName, outcome.getClass().getSimpleName());
         exchange.setProperty(OUTCOME_PROPERTY, outcome);
 
@@ -283,6 +348,83 @@ class GuanacoRouteBuilder extends RouteBuilder {
         }
 
         exchange.getIn().setBody(outcome.body());
+    }
+
+    /**
+     * Resolves the Wire Tap's own binding (by simple class name, the same
+     * lookup Multicast/Split destinations use) and stashes the target URI
+     * and tap body for the wireTap() DSL step and {@link #prepareTapCopy}
+     * to read. If no binding is found, logs a warning and leaves
+     * TAP_TARGET_PROPERTY unset -- {@link #hasPendingTap} then correctly
+     * treats this message as untapped rather than failing the whole
+     * dispatch over a missing tap target; the primary outcome is
+     * unaffected either way.
+     */
+    private void resolveTapTarget(Exchange exchange, RouteOutcome<?> tap) {
+        if (!isRegistered(tap)) {
+            return;
+        }
+
+        String tapOutcomeName = tap.getClass().getSimpleName();
+        List<String> endpoints = config.getUrisFor(tapOutcomeName);
+
+        if (endpoints == null || endpoints.isEmpty()) {
+            log.warn("[{}] WireTap outcome '{}' has no binding — tap skipped, primary outcome still dispatched normally.",
+                    processorName, tapOutcomeName);
+            return;
+        }
+
+        if (endpoints.size() > 1) {
+            log.warn("[{}] WireTap outcome '{}' has {} bindings — Wire Tap only supports one target; " +
+                    "tapping to the first ('{}') only.",
+                    processorName, tapOutcomeName, endpoints.size(), endpoints.get(0));
+        }
+
+        exchange.setProperty(TAP_TARGET_PROPERTY, endpoints.get(0));
+        exchange.setProperty(TAP_BODY_PROPERTY, tap.body());
+    }
+
+    private boolean hasPendingTap(Exchange exchange) {
+        return exchange.getProperty(TAP_TARGET_PROPERTY) != null;
+    }
+
+    /**
+     * Runs on the tap's own COPY, never the original exchange -- this,
+     * together with Camel's own async dispatch, is where Wire Tap's
+     * main-flow isolation actually comes from: nothing done here can
+     * affect the exchange continuing through the rest of this route.
+     * Overwrites the copy's body (inherited from the primary via shallow
+     * exchange.copy()) with the tap outcome's own body, and marks the copy
+     * so the route-scoped onException(Throwable.class) handler recognizes
+     * a failure here as a tap failure rather than a main-flow one.
+     */
+    private void prepareTapCopy(Exchange copy) {
+        copy.getIn().setBody(copy.getProperty(TAP_BODY_PROPERTY));
+        copy.setProperty(TAP_MARKER_PROPERTY, true);
+    }
+
+    /**
+     * Unconditional SLF4J baseline for a Wire Tap failure, plus telemetry
+     * when a listener is registered. Never rethrows -- .handled(false) on
+     * the onException clause that invokes this already lets the exception
+     * continue exactly as Camel's own default (unconfigured) handling of
+     * an async wireTap failure would; this process() only adds our own
+     * logging/telemetry on top, it doesn't change what happens to the
+     * exception afterward.
+     */
+    private void recordWireTapFailure(Exchange exchange) {
+        Throwable cause = exchange.getException();
+        if (cause == null) {
+            cause = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Throwable.class);
+        }
+
+        String targetUri = exchange.getProperty(TAP_TARGET_PROPERTY, String.class);
+
+        log.error("[{}] Wire Tap failed — target='{}'", processorName, targetUri, cause);
+
+        if (runtimeContext.telemetryListener() != null && cause != null) {
+            runtimeContext.telemetryListener().onOutcomeFailed(processorName, targetUri, cause);
+        }
     }
 
     private boolean isDrop(Exchange exchange) {
