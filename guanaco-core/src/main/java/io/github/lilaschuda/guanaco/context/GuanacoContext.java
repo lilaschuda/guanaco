@@ -9,6 +9,7 @@ import io.github.lilaschuda.guanaco.api.GuanacoRoute;
 import io.github.lilaschuda.guanaco.api.Processor;
 import io.github.lilaschuda.guanaco.api.telemetry.GuanacoTelemetryListener;
 import org.apache.camel.AggregationStrategy;
+import org.apache.camel.saga.InMemorySagaService;
 import org.reflections.Reflections;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -199,6 +200,28 @@ public class GuanacoContext extends SpringCamelContext {
         GuanacoRuntimeContext runtimeContext = new GuanacoRuntimeContext(
                 outcomeRegistry, Map.copyOf(aggregationStrategies), Map.copyOf(delayStrategies), telemetryListener);
 
+        // Message history recording has real per-node overhead, so it's
+        // only enabled when something will actually consume it -- same
+        // all-or-nothing principle as every other telemetry hook. An app
+        // with no listener registered pays nothing extra for this.
+        this.setMessageHistory(telemetryListener != null);
+
+        // Camel's .saga() has no automatic in-memory fallback of its own --
+        // confirmed via SagaReifier.resolveSagaService(): with no explicit
+        // sagaServiceBean/sagaServiceRef, it falls through to a MANDATORY
+        // registry type-search for a CamelSagaService and throws if none
+        // exists. Registering Camel's own InMemorySagaService as a service
+        // here (not a registry bean) gives every saga-configured route a
+        // sensible default "out of the box" -- exactly what a user reading
+        // GuanacoSagaConfig's javadoc would expect. It's a genuine no-op for
+        // any route that sets its own sagaServiceRef, since that ref lookup
+        // is checked first in Camel's own resolution order, before the
+        // service-lookup fallback this satisfies.
+        boolean anySagaConfigured = routeConfigs.values().stream().anyMatch(rc -> rc.getSaga() != null);
+        if (anySagaConfigured) {
+            this.addService(new InMemorySagaService());
+        }
+
         Reflections reflections = new Reflections(basePackage);
         Set<Class<?>> rawProcessorClasses = reflections.getTypesAnnotatedWith(GuanacoRoute.class);
 
@@ -233,6 +256,7 @@ public class GuanacoContext extends SpringCamelContext {
             validator.validateResequenceConfig(name, routeConfig);
             validator.validateSampleConfig(name, routeConfig);
             validator.validateThreadsConfig(name, routeConfig);
+            validator.validateSagaConfig(name, routeConfig);
             validator.validateThrottlerConfig(name, routeConfig);
             validator.validateDelayerConfig(name, routeConfig);
             validator.validateDslOnlyPolicyScope(name, routeConfig, routeInterface);

@@ -72,4 +72,18 @@ public interface GuanacoTelemetryListener {
     default List<FailureRecord> recentFailures() {
         return List.of();
     }
+
+    /**
+     * Invoked once per exchange, when routing finishes — regardless of
+     * whether it finished by normal completion, an exception, or being
+     * stopped early (Drop, Sample-rejection, idempotent skip-duplicate).
+     * Reports the full node-by-node path the exchange took, as captured
+     * by Camel's own message history mechanism. Only invoked when message
+     * history is enabled, which happens automatically whenever a listener
+     * is registered — there is no separate opt-in for this specifically.
+     *
+     * @param routeId the reporting processor/route name
+     * @param history the ordered list of nodes the exchange visited; never null, but may be empty
+     */
+    default void onMessageHistory(String routeId, List<RouteSpan> history) {}
 }

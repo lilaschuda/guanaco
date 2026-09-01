@@ -11,6 +11,7 @@ import io.github.lilaschuda.guanaco.config.GuanacoConfig.ValidationMode;
 import io.github.lilaschuda.guanaco.config.GuanacoDelayerConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoIdempotentConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoResequenceConfig;
+import io.github.lilaschuda.guanaco.config.GuanacoSagaConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoSampleConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoThreadsConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoThrottlerConfig;
@@ -19,6 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -594,6 +596,82 @@ class BindingValidator {
             throw new InvalidRouteConfigurationException(
                     "[" + processorName + "] threads.maxPoolSize (" + threads.getMaxPoolSize()
                     + ") must not be smaller than threads.poolSize (" + threads.getPoolSize() + ").");
+        }
+    }
+
+    /**
+     * Validates the route-level Saga configuration, if present. Unlike
+     * {@link #validateThreadsConfig}'s inline-vs-ref exclusion, most of
+     * this is straightforward shape checking; the one thing worth calling
+     * out is that {@code compensation}/{@code completion} bindings are
+     * resolved and validated here — at boot, once — rather than at
+     * runtime the way {@code WireTap}'s tap target is, since Camel's
+     * {@code .saga()} needs exactly one fixed endpoint for each, decided
+     * before any message ever flows. An ambiguous (multiple bindings) or
+     * missing binding for a declared compensation/completion class is a
+     * configuration mistake that should fail loud at boot, not be
+     * silently resolved to "the first one" the way a per-message runtime
+     * decision sometimes has to be.
+     *
+     * @param processorName the name of the processor being validated
+     * @param routeConfig the route configuration loaded for this processor
+     * @throws InvalidRouteConfigurationException if any saga field is malformed, or a declared
+     *         compensation/completion outcome has no binding, or more than one
+     */
+    public void validateSagaConfig(String processorName, RouteConfig routeConfig) {
+        GuanacoSagaConfig saga = routeConfig.getSaga();
+        if (saga == null) {
+            return;
+        }
+
+        if (saga.getSagaServiceRef() != null && saga.getSagaServiceRef().isBlank()) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] saga.sagaServiceRef must not be blank.");
+        }
+
+        if (saga.getTimeoutMs() != null && saga.getTimeoutMs() <= 0) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] saga.timeoutMs must be greater than zero.");
+        }
+
+        List<String> optionKeys = saga.getOptionKeys();
+        Set<String> seen = new HashSet<>();
+        for (String key : optionKeys) {
+            if (key == null || key.isBlank()) {
+                throw new InvalidRouteConfigurationException(
+                        "[" + processorName + "] saga.optionKeys contains a null or blank entry.");
+            }
+            if (!seen.add(key)) {
+                throw new InvalidRouteConfigurationException(
+                        "[" + processorName + "] saga.optionKeys contains a duplicate key '" + key + "'.");
+            }
+        }
+
+        validateSagaOutcomeBinding(processorName, routeConfig, "compensation", saga.getCompensation());
+        validateSagaOutcomeBinding(processorName, routeConfig, "completion", saga.getCompletion());
+    }
+
+    private void validateSagaOutcomeBinding(
+            String processorName, RouteConfig routeConfig, String fieldName, Class<? extends RouteOutcome<?>> outcomeClass) {
+        if (outcomeClass == null) {
+            return;
+        }
+
+        String outcomeName = outcomeClass.getSimpleName();
+        List<String> uris = routeConfig.getUrisFor(outcomeName);
+
+        if (uris == null || uris.isEmpty()) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] saga." + fieldName + " references '" + outcomeName
+                    + "', which has no binding declared. Add a routes.yaml/json entry for '" + outcomeName
+                    + "', exactly like any other outcome type.");
+        }
+
+        if (uris.size() > 1) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] saga." + fieldName + " references '" + outcomeName
+                    + "', which has " + uris.size() + " bindings — Camel's .saga() needs exactly one fixed "
+                    + fieldName + " endpoint. Give '" + outcomeName + "' a single binding.");
         }
     }
 

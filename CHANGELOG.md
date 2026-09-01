@@ -32,10 +32,31 @@ change without a major version bump.
   fully supported binding target for route lifecycle management
   (start/stop/suspend/resume/status) — dispatched through the existing
   binding model, no new outcome type or config schema required.
+- **Message History**: Route-level telemetry extension capturing the full
+  per-node execution path (via Camel's native message history mechanism)
+  through a new `onMessageHistory` hook on `GuanacoTelemetryListener`,
+  reported through a single `onCompletion()` handler so it uniformly
+  covers dispatch success, dispatch failure, Drop, Sample-rejection, and
+  resequence/idempotent short-circuits alike.
+- **Saga EIP**: `SagaStep<T>` outcome wrapper (wraps a primary outcome plus
+  a per-message snapshot of exchange state for compensation/completion
+  callbacks) and route-level `GuanacoSagaConfig` (compensation/completion
+  outcome bindings, propagation, completion mode, timeout, and an optional
+  named/shared saga service). A Saga-configured route compiles to two
+  internal Camel routes connected by a `direct:` hop, guaranteeing outcome
+  dispatch and option snapshotting complete before Camel's own saga
+  coordinator begins tracking the exchange. `GuanacoContext` registers a
+  default in-memory saga service automatically; real distributed
+  coordination (e.g. LRA) only requires registering a `CamelSagaService`
+  Spring bean and pointing `sagaServiceRef` at it.
 
 ### Changed
 - Route-level fixed pipeline order extended to
   `Sample → Threads → Idempotent → Resequence → Aggregate → dispatch`.
+- Route-level Saga configuration adds a second, internal Camel route per
+  processor (`guanaco-<name>-saga`, connected via an internal `direct:`
+  hop) — visible in startup logs and in `MessageHistory` route IDs for
+  saga-participating processors.
 
 ### Fixed
 - **Wire-Tap DLQ Leak**: Handled background wire-tap exceptions (`.handled(true)`) to isolate 

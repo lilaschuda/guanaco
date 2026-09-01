@@ -9,6 +9,7 @@ import io.github.lilaschuda.guanaco.config.GuanacoCircuitBreakerConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoDelayerConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoIdempotentConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoResequenceConfig;
+import io.github.lilaschuda.guanaco.config.GuanacoSagaConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoSampleConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoThreadsConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoThrottlerConfig;
@@ -18,6 +19,8 @@ import io.github.lilaschuda.guanaco.api.Drop;
 import io.github.lilaschuda.guanaco.api.Multicast;
 import io.github.lilaschuda.guanaco.api.Split;
 import io.github.lilaschuda.guanaco.api.WireTap;
+import io.github.lilaschuda.guanaco.api.SagaStep;
+import io.github.lilaschuda.guanaco.api.telemetry.RouteSpan;
 import org.apache.camel.AggregationStrategy;
 import org.apache.camel.Exchange;
 import org.apache.camel.Expression;
@@ -28,6 +31,7 @@ import org.apache.camel.model.ChoiceDefinition;
 import org.apache.camel.model.ProcessorDefinition;
 import org.apache.camel.model.ResequenceDefinition;
 import org.apache.camel.model.RouteDefinition;
+import org.apache.camel.model.SagaDefinition;
 import org.apache.camel.model.SamplingDefinition;
 import org.apache.camel.model.ThreadsDefinition;
 import org.apache.camel.spi.IdempotentRepository;
@@ -35,6 +39,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.apache.camel.model.DelayDefinition;
@@ -76,6 +81,15 @@ class GuanacoRouteBuilder extends RouteBuilder {
      * double-logged or double-reported here.
      */
     private static final String TAP_MARKER_PROPERTY = "guanaco.wireTap.isTapCopy";
+
+    /**
+     * Prefix for the exchange properties {@link #applySagaOptions} sets
+     * from a SagaStep's per-message option values, and that the
+     * boot-time-registered {@code .option(key, ...)} expressions in
+     * {@link #wireSaga} read back dynamically. Full property name is this
+     * prefix plus the option key, e.g. {@code guanaco.saga.option.orderId}.
+     */
+    private static final String SAGA_OPTION_PROPERTY_PREFIX = "guanaco.saga.option.";
     
     private final Processor<? extends RouteOutcome<?>> processor;
     private final Class<? extends RouteOutcome<?>> routeInterface;
@@ -133,6 +147,23 @@ class GuanacoRouteBuilder extends RouteBuilder {
                 .handled(false)
                 .process(exchange -> runtimeContext.telemetryListener().onResequenceEvent(processorName, true));
         }
+
+        // Message history reporting. onCompletion() -- unlike a step
+        // chained into the pipeline -- runs once the exchange's unit of
+        // work finishes, REGARDLESS of how: normal completion, an
+        // exception, or being stopped early (Drop, Sample-rejection,
+        // idempotent skip-duplicate). That uniformity is exactly why this
+        // is the right mechanism here: a routeStop-based stop (Drop,
+        // Sample) skips every processor chained after it in the pipeline
+        // -- including any reporting hook we might try to chain there --
+        // so per-hook-point reporting (mirroring onOutcomeDispatched/
+        // onOutcomeFailed's call sites) genuinely cannot cover those paths.
+        // onCompletion sidesteps that entirely by not being a pipeline
+        // step at all. Must be registered before from() -- Camel enforces
+        // this and throws if routes already exist on this RouteBuilder.
+        if (runtimeContext.telemetryListener() != null) {
+            onCompletion().process(this::reportMessageHistory);
+        }
         
         RouteDefinition route = from(config.getFrom())
                 .routeId("guanaco-" + processorName);
@@ -187,7 +218,35 @@ class GuanacoRouteBuilder extends RouteBuilder {
                         .onPrepare(this::prepareTapCopy)
                 .end();
 
-        ChoiceDefinition choice = afterProcess.choice();
+        // If Saga is configured, hand off to a SEPARATE, internal route
+        // rather than wrapping .saga() around the rest of THIS route's
+        // DSL chain. This was empirically necessary, not a style choice:
+        // Camel's Saga processor evaluates .option(...) expressions (via
+        // beginStep()) BEFORE invoking whatever it wraps, always -- and
+        // testing confirmed dispatchOutcome (which sets the
+        // SAGA_OPTION_PROPERTY_PREFIX properties .option(...) reads) was
+        // still running AFTER that evaluation despite being positioned
+        // earlier in the same route's DSL chain, for reasons that traced
+        // through addOutput()/asType()/createChildProcessor() in Camel's
+        // own reifier source without a conclusive explanation. A direct:
+        // hop sidesteps the question entirely: DirectProducer passes the
+        // exact same Exchange instance straight through with no copy, so
+        // properties survive it fully, and the first route's processing
+        // (dispatchOutcome, WireTap) is unconditionally, verifiably
+        // complete before the second route -- containing only .saga() and
+        // the choice table -- ever begins.
+        ProcessorDefinition<?> beforeChoice;
+        if (config.getSaga() != null) {
+            String sagaInternalUri = "direct:guanaco-saga-internal-" + processorName;
+            afterProcess.to(sagaInternalUri);
+
+            RouteDefinition sagaRoute = from(sagaInternalUri).routeId("guanaco-" + processorName + "-saga");
+            beforeChoice = wireSaga(sagaRoute, config.getSaga());
+        } else {
+            beforeChoice = afterProcess;
+        }
+
+        ChoiceDefinition choice = beforeChoice.choice();
 
         choice.when(this::isDrop)
                 .stop();
@@ -256,6 +315,52 @@ class GuanacoRouteBuilder extends RouteBuilder {
         }
 
         return threads;
+    }
+
+    /**
+     * Wires the {@code .saga()} block itself. Never calls {@code .end()} --
+     * deliberately, matching {@link #wireIdempotent}'s precedent -- so the
+     * choice table (built on the return value, back in {@code configure()})
+     * nests as a child of this saga scope rather than as a sibling after
+     * it. compensation/completion URIs are resolved here from the already
+     * boot-time-validated bindings (see
+     * {@code BindingValidator#validateSagaConfig} -- guaranteed to exist
+     * and be unambiguous by the time this runs).
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private ProcessorDefinition wireSaga(ProcessorDefinition parent, GuanacoSagaConfig sagaConfig) {
+        log.info("[{}] Wiring Saga — propagation={}, completionMode={}, sagaServiceRef={}, timeoutMs={}, " +
+                "optionKeys={}",
+                processorName, sagaConfig.getPropagation(), sagaConfig.getCompletionMode(),
+                sagaConfig.getSagaServiceRef(), sagaConfig.getTimeoutMs(), sagaConfig.getOptionKeys());
+
+        SagaDefinition saga = parent.saga();
+
+        if (sagaConfig.getPropagation() != null) {
+            saga = saga.propagation(sagaConfig.getPropagation());
+        }
+        if (sagaConfig.getCompletionMode() != null) {
+            saga = saga.completionMode(sagaConfig.getCompletionMode());
+        }
+        if (sagaConfig.getTimeoutMs() != null) {
+            saga = saga.timeout(Duration.ofMillis(sagaConfig.getTimeoutMs()));
+        }
+        if (sagaConfig.getSagaServiceRef() != null) {
+            saga = saga.sagaService(sagaConfig.getSagaServiceRef());
+        }
+        if (sagaConfig.getCompensation() != null) {
+            String uri = config.getUrisFor(sagaConfig.getCompensation().getSimpleName()).get(0);
+            saga = saga.compensation(uri);
+        }
+        if (sagaConfig.getCompletion() != null) {
+            String uri = config.getUrisFor(sagaConfig.getCompletion().getSimpleName()).get(0);
+            saga = saga.completion(uri);
+        }
+        for (String key : sagaConfig.getOptionKeys()) {
+            saga = saga.option(key, exchangeProperty(SAGA_OPTION_PROPERTY_PREFIX + key));
+        }
+
+        return saga;
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -389,11 +494,16 @@ class GuanacoRouteBuilder extends RouteBuilder {
 
     private void dispatchOutcome(Exchange exchange) throws Exception {
         RouteOutcome<?> outcome = processor.process(exchange);
-
+        System.out.println("DEBUG: dispatchOutcome RUNNING at " + System.nanoTime());
         if (outcome == null) {
             throw new GuanacoRouteBuilderException(
                     "[" + processorName + "] process() returned null. " +
                     "Use Drop.INSTANCE to explicitly discard a message.");
+        }
+
+        if (outcome instanceof SagaStep<?> sagaStep) {
+            applySagaOptions(exchange, sagaStep);
+            outcome = sagaStep.primary();
         }
 
         if (outcome instanceof WireTap<?> wireTap) {
@@ -415,6 +525,50 @@ class GuanacoRouteBuilder extends RouteBuilder {
         }
 
         exchange.getIn().setBody(outcome.body());
+    }
+
+    /**
+     * Copies a {@link SagaStep}'s per-message option values onto the
+     * exchange, as properties the boot-time-registered
+     * {@code .option(key, ...)} expressions (see {@link #wireSaga}) read
+     * dynamically -- the values are per-message, even though Camel
+     * requires the set of option KEYS declared once, at boot.
+     *
+     * <p>Throws if this route has no {@code saga} config at all: a
+     * processor returning {@code SagaStep} promises saga participation,
+     * and if the route isn't actually wrapped in {@code .saga()}, these
+     * option properties would be set for nothing -- no {@code .option()}
+     * expression exists to ever read them, so the snapshot would be
+     * silently lost. That's a genuine configuration mismatch between the
+     * processor's own code and its routes.yaml/json, not something to
+     * paper over by just skipping the saga-specific behavior quietly.
+     *
+     * <p>A key present in {@code sagaStep.options()} but not declared in
+     * {@code optionKeys} is logged and skipped, not fatal -- consistent
+     * with how an unrecognized runtime value is generally treated
+     * elsewhere in this class (e.g. WireTap's missing-binding warning),
+     * reserving hard failures for boot-time configuration problems.
+     */
+    private void applySagaOptions(Exchange exchange, SagaStep<?> sagaStep) {
+        GuanacoSagaConfig sagaConfig = config.getSaga();
+        if (sagaConfig == null) {
+            throw new GuanacoRouteBuilderException(
+                    "[" + processorName + "] process() returned a SagaStep, but this route has no 'saga' "
+                    + "config declared. A SagaStep's options are only ever read by the .saga() block's own "
+                    + "boot-time-registered .option(...) expressions -- with no saga config, none exist, so "
+                    + "these values would be silently lost. Add a 'saga' block to this route's config.");
+        }
+
+        for (Map.Entry<String, Object> entry : sagaStep.options().entrySet()) {
+            String key = entry.getKey();
+            if (!sagaConfig.getOptionKeys().contains(key)) {
+                log.warn("[{}] SagaStep option '{}' is not declared in saga.optionKeys — ignored. "
+                        + "Declared keys: {}", processorName, key, sagaConfig.getOptionKeys());
+                continue;
+            }
+            exchange.setProperty(SAGA_OPTION_PROPERTY_PREFIX + key, entry.getValue());
+            System.out.println("DEBUG: applySagaOptions SET property '" + SAGA_OPTION_PROPERTY_PREFIX + key + "' = " + entry.getValue() + " at " + System.nanoTime());
+        }
     }
 
     /**
@@ -493,6 +647,32 @@ class GuanacoRouteBuilder extends RouteBuilder {
         if (runtimeContext.telemetryListener() != null && cause != null) {
             runtimeContext.telemetryListener().onOutcomeFailed(processorName, targetUri, cause);
         }
+    }
+
+    /**
+     * Reads Camel's own {@code Exchange.CamelMessageHistory} property —
+     * populated automatically, node by node, whenever message history is
+     * enabled on the CamelContext (see {@code GuanacoContext.wireRoutes()})
+     * — converts it to Guanaco's own {@link RouteSpan} DTO, and reports it.
+     * Only ever called from the {@code onCompletion()} registered in
+     * {@link #configure()} when a listener is present, so no null-check on
+     * the listener itself is needed here.
+     */
+    private void reportMessageHistory(Exchange exchange) {
+        List<org.apache.camel.MessageHistory> history =
+                exchange.getProperty(Exchange.MESSAGE_HISTORY, List.class);
+        if (history == null || history.isEmpty()) {
+            return;
+        }
+
+        List<RouteSpan> spans = new ArrayList<>(history.size());
+        for (org.apache.camel.MessageHistory entry : history) {
+            String nodeId = entry.getNode() != null ? entry.getNode().getId() : null;
+            String nodeType = entry.getNode() != null ? entry.getNode().getShortName() : null;
+            spans.add(new RouteSpan(entry.getRouteId(), nodeId, nodeType, entry.getElapsed()));
+        }
+
+        runtimeContext.telemetryListener().onMessageHistory(processorName, spans);
     }
 
     private boolean isDrop(Exchange exchange) {

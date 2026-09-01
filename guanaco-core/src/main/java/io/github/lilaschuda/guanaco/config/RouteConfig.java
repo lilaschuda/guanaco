@@ -49,6 +49,13 @@ public class RouteConfig {
      */
     private GuanacoThreadsConfig threads;
 
+    /**
+     * Route-level Saga policy — wraps this route's dispatch (choice table
+     * and everything downstream of Idempotent/Resequence/Aggregate) in
+     * Camel's native {@code .saga()}. See {@link GuanacoSagaConfig}.
+     */
+    private GuanacoSagaConfig saga;
+
     /** Route-level default circuit breaker policy — inherited by every binding unless overridden. */
     private GuanacoCircuitBreakerConfig circuitBreaker;
     private GuanacoThrottlerConfig throttler;
@@ -168,6 +175,20 @@ public class RouteConfig {
      * @param threads this route's thread handoff policy
      */
     public void setThreads(GuanacoThreadsConfig threads) { this.threads = threads; }
+
+    /**
+     * Gets this route's Saga policy.
+     *
+     * @return this route's Saga policy, or {@code null} if not used
+     */
+    public GuanacoSagaConfig getSaga() { return saga; }
+
+    /**
+     * Sets this route's Saga policy.
+     *
+     * @param saga this route's Saga policy
+     */
+    public void setSaga(GuanacoSagaConfig saga) { this.saga = saga; }
 
     /**
      * Gets this route's default circuit breaker policy.
