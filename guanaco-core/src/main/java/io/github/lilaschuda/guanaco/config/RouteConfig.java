@@ -34,6 +34,21 @@ public class RouteConfig {
     private GuanacoIdempotentConfig idempotent;
     private GuanacoResequenceConfig resequence;
 
+    /**
+     * Route-level ingress sample policy — applied once, before Idempotent,
+     * to the inbound stream. Independent of any binding-level sample
+     * policy; neither inherits from or overrides the other. See
+     * {@link GuanacoSampleConfig}.
+     */
+    private GuanacoSampleConfig sample;
+
+    /**
+     * Route-level pipeline thread handoff — a single async boundary applied
+     * once, right after Sample and before Idempotent. See
+     * {@link GuanacoThreadsConfig}.
+     */
+    private GuanacoThreadsConfig threads;
+
     /** Route-level default circuit breaker policy — inherited by every binding unless overridden. */
     private GuanacoCircuitBreakerConfig circuitBreaker;
     private GuanacoThrottlerConfig throttler;
@@ -125,6 +140,34 @@ public class RouteConfig {
      * @param resequence this route's resequencing configuration
      */
     public void setResequence(GuanacoResequenceConfig resequence) { this.resequence = resequence; }
+
+    /**
+     * Gets this route's ingress sample policy.
+     *
+     * @return this route's ingress sample policy, or {@code null} if not used
+     */
+    public GuanacoSampleConfig getSample() { return sample; }
+
+    /**
+     * Sets this route's ingress sample policy.
+     *
+     * @param sample this route's ingress sample policy
+     */
+    public void setSample(GuanacoSampleConfig sample) { this.sample = sample; }
+
+    /**
+     * Gets this route's thread handoff policy.
+     *
+     * @return this route's thread handoff policy, or {@code null} if not used
+     */
+    public GuanacoThreadsConfig getThreads() { return threads; }
+
+    /**
+     * Sets this route's thread handoff policy.
+     *
+     * @param threads this route's thread handoff policy
+     */
+    public void setThreads(GuanacoThreadsConfig threads) { this.threads = threads; }
 
     /**
      * Gets this route's default circuit breaker policy.

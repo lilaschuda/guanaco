@@ -1,0 +1,228 @@
+diff --git a/guanaco-core/src/main/java/io/github/lilaschuda/guanaco/context/BindingValidator.java b/guanaco-core/src/main/java/io/github/lilaschuda/guanaco/context/BindingValidator.java
+index 2312962..469d225 100644
+--- a/guanaco-core/src/main/java/io/github/lilaschuda/guanaco/context/BindingValidator.java
++++ b/guanaco-core/src/main/java/io/github/lilaschuda/guanaco/context/BindingValidator.java
+@@ -19,6 +19,7 @@ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+ 
+ import java.util.Arrays;
++import java.util.LinkedHashSet;
+ import java.util.List;
+ import java.util.Map;
+ import java.util.Set;
+@@ -36,6 +37,14 @@ class BindingValidator {
+             "language", "groovy", "js", "javascript", "mvel", "ognl", "python"
+     );
+ 
++    private static final String CONTROLBUS_SCHEME = "controlbus";
++    // LinkedHashSet, not Set.of() -- Set.of()'s iteration order is
++    // deliberately unspecified/randomized per JVM run, which would make
++    // this exact error message read differently across restarts.
++    private static final Set<String> CONTROLBUS_ALLOWED_ACTIONS = new LinkedHashSet<>(List.of(
++            "start", "stop", "suspend", "resume", "status"
++    ));
++
+     private final ValidationMode mode;
+ 
+     /**
+@@ -303,7 +312,19 @@ class BindingValidator {
+                 processorName, reseq.getSequenceHeader(), reseq.getMode());
+     }
+ 
+-    private void validateNoForbiddenSchemes(String processorName, RouteConfig routeConfig) {
++    /**
++     * Validates that no declared endpoint URI (the route's {@code from},
++     * or any binding target) uses a forbidden scripting scheme, and that
++     * any {@code controlbus:} URI stays within the supported route
++     * lifecycle mode (see {@link #checkControlBus}).
++     *
++     * @param processorName the name of the processor being validated
++     * @param routeConfig the route configuration loaded for this processor
++     * @throws io.github.lilaschuda.guanaco.context.exception.ForbiddenComponentException
++     *         if a forbidden scripting scheme or controlbus:language: mode is found
++     * @throws InvalidRouteConfigurationException if a controlbus:route URI is missing or has an invalid action
++     */
++    public void validateNoForbiddenSchemes(String processorName, RouteConfig routeConfig) {
+         checkUri(processorName, "from", routeConfig.getFrom());
+ 
+         if (routeConfig.getBindings() != null) {
+@@ -591,6 +612,85 @@ class BindingValidator {
+             log.error(msg);
+             throw new ForbiddenComponentException(msg);
+         }
++
++        if (CONTROLBUS_SCHEME.equals(scheme)) {
++            checkControlBus(processorName, fieldDescription, uri);
++        }
++    }
++
++    /**
++     * Guanaco's scripting guardrail above matches only the top-level Camel
++     * component scheme, so {@code controlbus:language:...} — a completely
++     * different Camel mode that executes an arbitrary expression against
++     * the CamelContext — would otherwise sail straight past it, laundered
++     * through a component name that isn't on the forbidden list. Closed
++     * here, specifically for controlbus: URIs.
++     *
++     * <p>Also enforces that {@code controlbus:route} URIs (the only other
++     * supported mode) carry a present, recognized {@code action} —
++     * Camel's own {@code ControlBusProducer} silently no-ops at runtime if
++     * neither {@code action} nor {@code language} is set, so a missing
++     * action would otherwise compile cleanly and just do nothing.
++     */
++    private void checkControlBus(String processorName, String fieldDescription, String uri) {
++        String remaining = uri.substring(CONTROLBUS_SCHEME.length() + 1);
++        int queryIdx = remaining.indexOf('?');
++        String path = queryIdx >= 0 ? remaining.substring(0, queryIdx) : remaining;
++        String query = queryIdx >= 0 ? remaining.substring(queryIdx + 1) : "";
++
++        if (path.startsWith("language:")) {
++            String msg = String.format(
++                    "[%s] Forbidden scripting mode 'controlbus:%s' found in %s ('%s'). "
++                    + "controlbus:language:... executes an arbitrary expression against the CamelContext — "
++                    + "exactly what Guanaco's scripting guardrail exists to prevent, reached here through a "
++                    + "different component name. Only controlbus:route?routeId=...&action=... "
++                    + "(route lifecycle management) is permitted.",
++                    processorName, path, fieldDescription, uri);
++            log.error(msg);
++            throw new ForbiddenComponentException(msg);
++        }
++
++        if (!"route".equals(path)) {
++            boolean looksLikeTypo = path.equalsIgnoreCase("route") || path.equalsIgnoreCase("routes");
++            String hint = looksLikeTypo
++                    ? " Did you mean 'controlbus:route'? (mode names are case-sensitive, and it's singular.)"
++                    : "";
++            String msg = String.format(
++                    "[%s] Unsupported controlbus mode '%s' found in %s ('%s')." + hint + " "
++                    + "Guanaco only supports controlbus:route?routeId=...&action=... for route lifecycle management.",
++                    processorName, path, fieldDescription, uri);
++            log.error(msg);
++            throw new ForbiddenComponentException(msg);
++        }
++
++        String action = extractQueryParam(query, "action");
++        if (action == null) {
++            throw new InvalidRouteConfigurationException(
++                    "[" + processorName + "] " + fieldDescription + " ('" + uri + "') is missing a required "
++                    + "'action' parameter. Without one, controlbus:route silently does nothing at runtime — "
++                    + "Camel's own ControlBusProducer just no-ops when neither action nor language is set. "
++                    + "Allowed actions: " + CONTROLBUS_ALLOWED_ACTIONS + ".");
++        }
++        if (!CONTROLBUS_ALLOWED_ACTIONS.contains(action)) {
++            throw new InvalidRouteConfigurationException(
++                    "[" + processorName + "] " + fieldDescription + " ('" + uri + "') has action='" + action
++                    + "', which is not a recognized route lifecycle action. Allowed: "
++                    + CONTROLBUS_ALLOWED_ACTIONS + ".");
++        }
++    }
++
++    private String extractQueryParam(String query, String key) {
++        if (query.isEmpty()) {
++            return null;
++        }
++        for (String pair : query.split("&")) {
++            int eq = pair.indexOf('=');
++            String k = eq >= 0 ? pair.substring(0, eq) : pair;
++            if (key.equals(k)) {
++                return eq >= 0 ? pair.substring(eq + 1) : "";
++            }
++        }
++        return null;
+     }
+ 
+     private String extractScheme(String uri) {
+diff --git a/guanaco-core/src/test/java/io/github/lilaschuda/guanaco/context/BindingValidatorControlBusTest.java b/guanaco-core/src/test/java/io/github/lilaschuda/guanaco/context/BindingValidatorControlBusTest.java
+new file mode 100644
+index 0000000..72e578f
+--- /dev/null
++++ b/guanaco-core/src/test/java/io/github/lilaschuda/guanaco/context/BindingValidatorControlBusTest.java
+@@ -0,0 +1,88 @@
++package io.github.lilaschuda.guanaco.context;
++
++import io.github.lilaschuda.guanaco.config.GuanacoConfig;
++import io.github.lilaschuda.guanaco.config.RouteConfig;
++import io.github.lilaschuda.guanaco.context.exception.ForbiddenComponentException;
++import io.github.lilaschuda.guanaco.context.exception.InvalidRouteConfigurationException;
++import org.junit.jupiter.api.Test;
++
++import java.util.Map;
++
++import static org.assertj.core.api.Assertions.assertThatCode;
++import static org.assertj.core.api.Assertions.assertThatThrownBy;
++
++/**
++ * Covers Phase 3's two boot-time guardrails around {@code controlbus:}
++ * endpoints. No new outcome wrapper or config schema is needed for
++ * ControlBus itself -- controlbus:route?routeId=...&action=... is a
++ * completely ordinary producer endpoint under Guanaco's existing
++ * binding-dispatch model. This is purely validation.
++ */
++class BindingValidatorControlBusTest extends GuanacoRouteBuilderTestSupport {
++
++    @Test
++    void controlBusLanguageMode_isForbidden_evenThoughSchemeIsNotOnTheScriptingList() {
++        // The existing FORBIDDEN_SCHEMES check matches only the top-level
++        // component scheme ("controlbus"), which isn't itself forbidden --
++        // this proves the controlbus:language:... submode is caught
++        // separately, not laundered through.
++        RouteConfig config = routeConfig("direct:orders",
++                Map.of("StopOrderRoute", "controlbus:language:simple?expression=${body}"));
++
++        BindingValidator validator = new BindingValidator(GuanacoConfig.ValidationMode.STRICT);
++
++        assertThatThrownBy(() -> validator.validateNoForbiddenSchemes("ControlBusTest", config))
++                .isInstanceOf(ForbiddenComponentException.class)
++                .hasMessageContaining("controlbus:language:");
++    }
++
++    @Test
++    void controlBusUnknownMode_isRejected() {
++        RouteConfig config = routeConfig("direct:orders",
++                Map.of("StopOrderRoute", "controlbus:routes?routeId=orderRoute&action=stop")); // typo: "routes"
++
++        BindingValidator validator = new BindingValidator(GuanacoConfig.ValidationMode.STRICT);
++
++        assertThatThrownBy(() -> validator.validateNoForbiddenSchemes("ControlBusTest", config))
++                .isInstanceOf(ForbiddenComponentException.class)
++                .hasMessageContaining("Unsupported controlbus mode");
++    }
++
++    @Test
++    void controlBusRoute_missingAction_failsAtBoot() {
++        RouteConfig config = routeConfig("direct:orders",
++                Map.of("StopOrderRoute", "controlbus:route?routeId=orderRoute"));
++
++        BindingValidator validator = new BindingValidator(GuanacoConfig.ValidationMode.STRICT);
++
++        assertThatThrownBy(() -> validator.validateNoForbiddenSchemes("ControlBusTest", config))
++                .isInstanceOf(InvalidRouteConfigurationException.class)
++                .hasMessageContaining("missing a required 'action' parameter");
++    }
++
++    @Test
++    void controlBusRoute_invalidAction_failsAtBoot() {
++        RouteConfig config = routeConfig("direct:orders",
++                Map.of("StopOrderRoute", "controlbus:route?routeId=orderRoute&action=terminate"));
++
++        BindingValidator validator = new BindingValidator(GuanacoConfig.ValidationMode.STRICT);
++
++        assertThatThrownBy(() -> validator.validateNoForbiddenSchemes("ControlBusTest", config))
++                .isInstanceOf(InvalidRouteConfigurationException.class)
++                .hasMessageContaining("not a recognized route lifecycle action");
++    }
++
++    @Test
++    void controlBusRoute_validAction_passesForEachAllowedAction() {
++        for (String action : new String[] {"start", "stop", "suspend", "resume", "status"}) {
++            RouteConfig config = routeConfig("direct:orders",
++                    Map.of("StopOrderRoute", "controlbus:route?routeId=orderRoute&action=" + action));
++
++            BindingValidator validator = new BindingValidator(GuanacoConfig.ValidationMode.STRICT);
++
++            assertThatCode(() -> validator.validateNoForbiddenSchemes("ControlBusTest", config))
++                    .as("action=" + action + " should be accepted")
++                    .doesNotThrowAnyException();
++        }
++    }
++}

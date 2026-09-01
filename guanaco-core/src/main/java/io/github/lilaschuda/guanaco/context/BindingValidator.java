@@ -11,12 +11,15 @@ import io.github.lilaschuda.guanaco.config.GuanacoConfig.ValidationMode;
 import io.github.lilaschuda.guanaco.config.GuanacoDelayerConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoIdempotentConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoResequenceConfig;
+import io.github.lilaschuda.guanaco.config.GuanacoSampleConfig;
+import io.github.lilaschuda.guanaco.config.GuanacoThreadsConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoThrottlerConfig;
 import io.github.lilaschuda.guanaco.config.RouteConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,6 +36,14 @@ class BindingValidator {
     private static final Set<String> FORBIDDEN_SCHEMES = Set.of(
             "language", "groovy", "js", "javascript", "mvel", "ognl", "python"
     );
+
+    private static final String CONTROLBUS_SCHEME = "controlbus";
+    // LinkedHashSet, not Set.of() -- Set.of()'s iteration order is
+    // deliberately unspecified/randomized per JVM run, which would make
+    // this exact error message read differently across restarts.
+    private static final Set<String> CONTROLBUS_ALLOWED_ACTIONS = new LinkedHashSet<>(List.of(
+            "start", "stop", "suspend", "resume", "status"
+    ));
 
     private final ValidationMode mode;
 
@@ -301,7 +312,19 @@ class BindingValidator {
                 processorName, reseq.getSequenceHeader(), reseq.getMode());
     }
 
-    private void validateNoForbiddenSchemes(String processorName, RouteConfig routeConfig) {
+    /**
+     * Validates that no declared endpoint URI (the route's {@code from},
+     * or any binding target) uses a forbidden scripting scheme, and that
+     * any {@code controlbus:} URI stays within the supported route
+     * lifecycle mode (see {@link #checkControlBus}).
+     *
+     * @param processorName the name of the processor being validated
+     * @param routeConfig the route configuration loaded for this processor
+     * @throws io.github.lilaschuda.guanaco.context.exception.ForbiddenComponentException
+     *         if a forbidden scripting scheme or controlbus:language: mode is found
+     * @throws InvalidRouteConfigurationException if a controlbus:route URI is missing or has an invalid action
+     */
+    public void validateNoForbiddenSchemes(String processorName, RouteConfig routeConfig) {
         checkUri(processorName, "from", routeConfig.getFrom());
 
         if (routeConfig.getBindings() != null) {
@@ -318,7 +341,7 @@ class BindingValidator {
     }
 
     /**
-     * Validates that no per-binding DSL-only policy (circuitBreaker, throttler, delayer)
+     * Validates that no per-binding DSL-only policy (circuitBreaker, throttler, delayer, sample)
      * is declared on an outcome that isn't a permitted subtype of the
      * processor's sealed hierarchy.
      *
@@ -350,6 +373,9 @@ class BindingValidator {
                 }
                 if (target.getDelayer() != null) {
                     throw scopeViolation(processorName, entry.getKey(), "delayer", routeInterface);
+                }
+                if (target.getSample() != null) {
+                    throw scopeViolation(processorName, entry.getKey(), "sample", routeInterface);
                 }
             }
         }
@@ -464,6 +490,113 @@ class BindingValidator {
         }
     }
 
+    /**
+     * Validates the structural shape of sample configuration blocks, at
+     * both the route level (ingress) and binding level (egress). Unlike
+     * throttler/delayer/circuitBreaker, these two levels are validated
+     * completely independently — there is no inheritance, so a binding's
+     * sample block is checked purely on its own terms, never in relation
+     * to the route-level one.
+     *
+     * @param processorName the name of the processor being validated
+     * @param routeConfig the route configuration loaded for this processor
+     * @throws InvalidRouteConfigurationException if sample parameters are incomplete or contradictory
+     */
+    public void validateSampleConfig(String processorName, RouteConfig routeConfig) {
+        validateSampleShape(processorName, "sample", routeConfig.getSample());
+
+        for (Map.Entry<String, List<BindingTarget>> entry : routeConfig.getBindings().entrySet()) {
+            for (BindingTarget target : entry.getValue()) {
+                if (target.getSample() != null) {
+                    validateSampleShape(processorName, "bindings." + entry.getKey() + ".sample", target.getSample());
+                }
+            }
+        }
+    }
+
+    private void validateSampleShape(String processorName, String fieldDescription, GuanacoSampleConfig sample) {
+        if (sample == null) {
+            return;
+        }
+
+        boolean hasFrequency = sample.getMessageFrequency() != null;
+        boolean hasPeriod = sample.getSamplePeriodMillis() != null;
+
+        if (hasFrequency && hasPeriod) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] " + fieldDescription + " sets both messageFrequency and "
+                    + "samplePeriodMillis — these are alternative sample modes. Set exactly one.");
+        }
+
+        if (!hasFrequency && !hasPeriod) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] " + fieldDescription + " must set exactly one of messageFrequency "
+                    + "or samplePeriodMillis.");
+        }
+
+        if (hasFrequency && sample.getMessageFrequency() <= 0) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] " + fieldDescription + ".messageFrequency must be greater than zero.");
+        }
+
+        if (hasPeriod && sample.getSamplePeriodMillis() <= 0) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] " + fieldDescription + ".samplePeriodMillis must be greater than zero.");
+        }
+    }
+
+    /**
+     * Validates the route-level thread handoff configuration, if present.
+     * Unlike {@link #validateSampleShape}/delayer's shape validation, this
+     * is mutual exclusion rather than a required choice: an entirely empty
+     * {@code GuanacoThreadsConfig} is valid (plain {@code .threads()} with
+     * Camel's own defaults) — only combining {@code executorServiceRef}
+     * with an inline pool field is an error.
+     *
+     * @param processorName the name of the processor being validated
+     * @param routeConfig the route configuration loaded for this processor
+     * @throws InvalidRouteConfigurationException if executorServiceRef is combined with an inline pool field,
+     *         or an inline pool size is not positive, or maxPoolSize is smaller than poolSize
+     */
+    public void validateThreadsConfig(String processorName, RouteConfig routeConfig) {
+        GuanacoThreadsConfig threads = routeConfig.getThreads();
+        if (threads == null) {
+            return;
+        }
+
+        boolean hasInlineField = threads.getPoolSize() != null
+                || threads.getMaxPoolSize() != null
+                || threads.getThreadName() != null
+                || threads.getRejectedPolicy() != null
+                || threads.getCallerRunsWhenRejected() != null;
+        boolean hasRef = threads.getExecutorServiceRef() != null;
+
+        if (hasRef && hasInlineField) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] threads sets executorServiceRef together with an inline pool field "
+                    + "(poolSize/maxPoolSize/threadName/rejectedPolicy/callerRunsWhenRejected) — these are "
+                    + "alternative pool sources. Set executorServiceRef alone, or inline fields alone (or "
+                    + "neither, to use Camel's own default pool).");
+        }
+
+        if (threads.getPoolSize() != null && threads.getPoolSize() <= 0) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] threads.poolSize must be greater than zero.");
+        }
+
+        if (threads.getMaxPoolSize() != null && threads.getMaxPoolSize() <= 0) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] threads.maxPoolSize must be greater than zero.");
+        }
+
+        if (threads.getPoolSize() != null && threads.getMaxPoolSize() != null
+                && threads.getMaxPoolSize() < threads.getPoolSize()) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] threads.maxPoolSize (" + threads.getMaxPoolSize()
+                    + ") must not be smaller than threads.poolSize (" + threads.getPoolSize() + ").");
+        }
+    }
+
     private void checkUri(String processorName, String fieldDescription, String uri) {
         if (uri == null) {
             return;
@@ -479,6 +612,85 @@ class BindingValidator {
             log.error(msg);
             throw new ForbiddenComponentException(msg);
         }
+
+        if (CONTROLBUS_SCHEME.equals(scheme)) {
+            checkControlBus(processorName, fieldDescription, uri);
+        }
+    }
+
+    /**
+     * Guanaco's scripting guardrail above matches only the top-level Camel
+     * component scheme, so {@code controlbus:language:...} — a completely
+     * different Camel mode that executes an arbitrary expression against
+     * the CamelContext — would otherwise sail straight past it, laundered
+     * through a component name that isn't on the forbidden list. Closed
+     * here, specifically for controlbus: URIs.
+     *
+     * <p>Also enforces that {@code controlbus:route} URIs (the only other
+     * supported mode) carry a present, recognized {@code action} —
+     * Camel's own {@code ControlBusProducer} silently no-ops at runtime if
+     * neither {@code action} nor {@code language} is set, so a missing
+     * action would otherwise compile cleanly and just do nothing.
+     */
+    private void checkControlBus(String processorName, String fieldDescription, String uri) {
+        String remaining = uri.substring(CONTROLBUS_SCHEME.length() + 1);
+        int queryIdx = remaining.indexOf('?');
+        String path = queryIdx >= 0 ? remaining.substring(0, queryIdx) : remaining;
+        String query = queryIdx >= 0 ? remaining.substring(queryIdx + 1) : "";
+
+        if (path.startsWith("language:")) {
+            String msg = String.format(
+                    "[%s] Forbidden scripting mode 'controlbus:%s' found in %s ('%s'). "
+                    + "controlbus:language:... executes an arbitrary expression against the CamelContext — "
+                    + "exactly what Guanaco's scripting guardrail exists to prevent, reached here through a "
+                    + "different component name. Only controlbus:route?routeId=...&action=... "
+                    + "(route lifecycle management) is permitted.",
+                    processorName, path, fieldDescription, uri);
+            log.error(msg);
+            throw new ForbiddenComponentException(msg);
+        }
+
+        if (!"route".equals(path)) {
+            boolean looksLikeTypo = path.equalsIgnoreCase("route") || path.equalsIgnoreCase("routes");
+            String hint = looksLikeTypo
+                    ? " Did you mean 'controlbus:route'? (mode names are case-sensitive, and it's singular.)"
+                    : "";
+            String msg = String.format(
+                    "[%s] Unsupported controlbus mode '%s' found in %s ('%s')." + hint + " "
+                    + "Guanaco only supports controlbus:route?routeId=...&action=... for route lifecycle management.",
+                    processorName, path, fieldDescription, uri);
+            log.error(msg);
+            throw new ForbiddenComponentException(msg);
+        }
+
+        String action = extractQueryParam(query, "action");
+        if (action == null) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] " + fieldDescription + " ('" + uri + "') is missing a required "
+                    + "'action' parameter. Without one, controlbus:route silently does nothing at runtime — "
+                    + "Camel's own ControlBusProducer just no-ops when neither action nor language is set. "
+                    + "Allowed actions: " + CONTROLBUS_ALLOWED_ACTIONS + ".");
+        }
+        if (!CONTROLBUS_ALLOWED_ACTIONS.contains(action)) {
+            throw new InvalidRouteConfigurationException(
+                    "[" + processorName + "] " + fieldDescription + " ('" + uri + "') has action='" + action
+                    + "', which is not a recognized route lifecycle action. Allowed: "
+                    + CONTROLBUS_ALLOWED_ACTIONS + ".");
+        }
+    }
+
+    private String extractQueryParam(String query, String key) {
+        if (query.isEmpty()) {
+            return null;
+        }
+        for (String pair : query.split("&")) {
+            int eq = pair.indexOf('=');
+            String k = eq >= 0 ? pair.substring(0, eq) : pair;
+            if (key.equals(k)) {
+                return eq >= 0 ? pair.substring(eq + 1) : "";
+            }
+        }
+        return null;
     }
 
     private String extractScheme(String uri) {

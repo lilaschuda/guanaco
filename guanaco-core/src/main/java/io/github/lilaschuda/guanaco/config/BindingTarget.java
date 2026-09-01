@@ -14,6 +14,14 @@ public class BindingTarget {
     private GuanacoThrottlerConfig throttler;
     private GuanacoDelayerConfig delayer;
 
+    /**
+     * This binding's egress sample policy — applied only during dispatch
+     * to this one destination, after the rest of the route already ran.
+     * Independent of any route-level sample policy; does not inherit from
+     * or override it. See {@link GuanacoSampleConfig}.
+     */
+    private GuanacoSampleConfig sample;
+
     /** Default constructor, used by Jackson when deserializing a binding target. */
     public BindingTarget() { }
 
@@ -72,4 +80,18 @@ public class BindingTarget {
      * @param delayer this binding's delayer override, or {@code null} to inherit the route default
      */
     public void setDelayer(GuanacoDelayerConfig delayer) { this.delayer = delayer; }
+
+    /**
+     * Gets this binding's egress sample policy.
+     *
+     * @return this binding's egress sample policy, or {@code null} if not used
+     */
+    public GuanacoSampleConfig getSample() { return sample; }
+
+    /**
+     * Sets this binding's egress sample policy.
+     *
+     * @param sample this binding's egress sample policy
+     */
+    public void setSample(GuanacoSampleConfig sample) { this.sample = sample; }
 }

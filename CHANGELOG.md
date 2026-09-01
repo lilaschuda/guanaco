@@ -9,10 +9,33 @@ change without a major version bump.
 ## [1.1.0] -  in progress
 
 ### Added
+- **Telemetry engine wiring**: Instrumented Idempotent, Resequence, Aggregate,
+  Delayer, and Dispatch operations, with optional boot-time short-circuiting
+  hooks in `GuanacoRouteBuilder` so an unregistered listener costs nothing.
+  `GuanacoResilienceHelper` reports circuit-breaker timing/failures with the
+  real R4J exception re-thrown afterward. Cleaned up the
+  `registerTelemetryListener` API on `GuanacoContext` and its Javadoc.
 - **Wire-Tap Routing**: Support for asynchronous wire-tapping with isolated 
   execution and telemetry logging.
 - **Wire-Tap Test Suite**: Unit tests verifying primary message delivery, 
   failure logging, and DLQ non-contamination under failure scenarios.
+- **Sampling EIP**: Route-level ingress sampling (`RouteConfig.sample`) and
+  independent binding-level egress sampling (`BindingTarget.sample`) via
+  `GuanacoSampleConfig` (`messageFrequency` or `samplePeriodMillis`,
+  mutually exclusive). Fixed as the first pipeline stage at route level.
+- **Threads EIP**: Route-level pipeline thread handoff via
+  `GuanacoThreadsConfig` — an inline Camel-managed pool
+  (`poolSize`/`maxPoolSize`/`threadName`/`rejectedPolicy`/`callerRunsWhenRejected`)
+  or a named, shared pool via `executorServiceRef`, resolved against the
+  existing Spring `ApplicationContext`. Runs after Sample, before Idempotent.
+- **ControlBus support**: `controlbus:route?routeId=...&action=...` is now a
+  fully supported binding target for route lifecycle management
+  (start/stop/suspend/resume/status) — dispatched through the existing
+  binding model, no new outcome type or config schema required.
+
+### Changed
+- Route-level fixed pipeline order extended to
+  `Sample → Threads → Idempotent → Resequence → Aggregate → dispatch`.
 
 ### Fixed
 - **Wire-Tap DLQ Leak**: Handled background wire-tap exceptions (`.handled(true)`) to isolate 
@@ -21,14 +44,13 @@ change without a major version bump.
   in dynamic URIs to prevent OGNL method navigation conflicts.
 - **DSL Choice Block Nesting**: Explicitly closed choice definitions with `.end()` 
   in `GuanacoRouteBuilder` to prevent route hierarchy ambiguities.
-
-### Changed
-- **Telemetry engine wiring**: Instrumented Idempotent, Resequence, Aggregate,
-  Delayer, and Dispatch operations, with optional boot-time short-circuiting
-  hooks in `GuanacoRouteBuilder` so an unregistered listener costs nothing.
-  `GuanacoResilienceHelper` reports circuit-breaker timing/failures with the
-  real R4J exception re-thrown afterward. Cleaned up the
-  `registerTelemetryListener` API on `GuanacoContext` and its Javadoc.
+- **ControlBus scripting-scheme gap**: the existing forbidden-scheme guardrail
+  in `BindingValidator` matched only the top-level component scheme, so
+  `controlbus:language:...` (arbitrary expression execution against the
+  CamelContext) previously passed unblocked. Now explicitly rejected;
+  `controlbus:route` URIs are also required to carry a recognized `action`
+  (`start`/`stop`/`suspend`/`resume`/`status`) at boot, since a missing
+  action otherwise silently no-ops at runtime.
 
 ## [1.0.0]
 

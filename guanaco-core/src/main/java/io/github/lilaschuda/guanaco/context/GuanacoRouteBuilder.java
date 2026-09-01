@@ -9,6 +9,8 @@ import io.github.lilaschuda.guanaco.config.GuanacoCircuitBreakerConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoDelayerConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoIdempotentConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoResequenceConfig;
+import io.github.lilaschuda.guanaco.config.GuanacoSampleConfig;
+import io.github.lilaschuda.guanaco.config.GuanacoThreadsConfig;
 import io.github.lilaschuda.guanaco.config.GuanacoThrottlerConfig;
 import io.github.lilaschuda.guanaco.config.RouteConfig;
 import io.github.lilaschuda.guanaco.api.Processor;
@@ -26,10 +28,13 @@ import org.apache.camel.model.ChoiceDefinition;
 import org.apache.camel.model.ProcessorDefinition;
 import org.apache.camel.model.ResequenceDefinition;
 import org.apache.camel.model.RouteDefinition;
+import org.apache.camel.model.SamplingDefinition;
+import org.apache.camel.model.ThreadsDefinition;
 import org.apache.camel.spi.IdempotentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.apache.camel.model.DelayDefinition;
@@ -134,6 +139,23 @@ class GuanacoRouteBuilder extends RouteBuilder {
 
         ProcessorDefinition<?> pipeline = route;
 
+        // Sampling, if configured, gates admission before any other
+        // processing -- a dropped message shouldn't pay for idempotent
+        // dedup, resequencing, or aggregation. Fixed as the very first
+        // stage, ahead of Idempotent/Resequence/Aggregate; not configurable.
+        if (config.getSample() != null) {
+            pipeline = wireSample(pipeline, config.getSample());
+        }
+
+        // Threads, if configured, hands the rest of this route's processing
+        // off to a pool -- placed after Sample specifically so a burst of
+        // noisy traffic is dropped on the (cheap, synchronous) ingress
+        // thread rather than being enqueued into a bounded thread pool
+        // first. Not configurable beyond this position.
+        if (config.getThreads() != null) {
+            pipeline = wireThreads(pipeline, config.getThreads());
+        }
+
         // Fixed order — Idempotent, then Resequence, then Aggregate. Not configurable.
         if (config.getIdempotent() != null) {
             pipeline = wireIdempotent(pipeline, config.getIdempotent());
@@ -189,6 +211,51 @@ class GuanacoRouteBuilder extends RouteBuilder {
                     .maximumRedeliveries(config.getErrorHandler().getMaxRetries())
                     .useOriginalMessage());
         }
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private ProcessorDefinition wireSample(ProcessorDefinition parent, GuanacoSampleConfig sampleConfig) {
+        if (sampleConfig.getMessageFrequency() != null) {
+            log.info("[{}] Wiring route-level Sample (ingress) — 1 in every {} messages",
+                    processorName, sampleConfig.getMessageFrequency());
+            return parent.sample(sampleConfig.getMessageFrequency());
+        }
+
+        log.info("[{}] Wiring route-level Sample (ingress) — at most 1 message per {}ms",
+                processorName, sampleConfig.getSamplePeriodMillis());
+        return parent.sample(Duration.ofMillis(sampleConfig.getSamplePeriodMillis()));
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private ProcessorDefinition wireThreads(ProcessorDefinition parent, GuanacoThreadsConfig threadsConfig) {
+        ThreadsDefinition threads = parent.threads();
+
+        if (threadsConfig.getExecutorServiceRef() != null) {
+            log.info("[{}] Wiring route-level Threads handoff — executorServiceRef='{}'",
+                    processorName, threadsConfig.getExecutorServiceRef());
+            return threads.executorService(threadsConfig.getExecutorServiceRef());
+        }
+
+        log.info("[{}] Wiring route-level Threads handoff — poolSize={}, maxPoolSize={}",
+                processorName, threadsConfig.getPoolSize(), threadsConfig.getMaxPoolSize());
+
+        if (threadsConfig.getPoolSize() != null) {
+            threads = threads.poolSize(threadsConfig.getPoolSize());
+        }
+        if (threadsConfig.getMaxPoolSize() != null) {
+            threads = threads.maxPoolSize(threadsConfig.getMaxPoolSize());
+        }
+        if (threadsConfig.getThreadName() != null) {
+            threads = threads.threadName(threadsConfig.getThreadName());
+        }
+        if (threadsConfig.getRejectedPolicy() != null) {
+            threads = threads.rejectedPolicy(threadsConfig.getRejectedPolicy());
+        }
+        if (threadsConfig.getCallerRunsWhenRejected() != null) {
+            threads = threads.callerRunsWhenRejected(threadsConfig.getCallerRunsWhenRejected());
+        }
+
+        return threads;
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -632,6 +699,7 @@ class GuanacoRouteBuilder extends RouteBuilder {
     private void addBranch(ChoiceDefinition choice, Class<?> outcomeClass, String outcomeName, List<BindingTarget> targets) {
         if (targets.size() == 1) {
             BindingTarget target = targets.get(0);
+            GuanacoSampleConfig sample = target.getSample();
             GuanacoThrottlerConfig throttler = config.resolveThrottlerFor(target);
             GuanacoDelayerConfig delayer = config.resolveDelayerFor(target);
             GuanacoCircuitBreakerConfig cb = config.resolveCircuitBreakerFor(target);
@@ -639,6 +707,11 @@ class GuanacoRouteBuilder extends RouteBuilder {
             ChoiceDefinition branch = choice.when(exchange -> outcomeClass.isInstance(exchange.getProperty(OUTCOME_PROPERTY)));
 
             ProcessorDefinition<?> parent = branch;
+
+            if (sample != null) {
+                log.info("[{}] Bound {} → {} (sampled egress)", processorName, outcomeName, target.getUri());
+                parent = applySample(parent, sample);
+            }
 
             if (throttler != null) {
                 log.info("[{}] Bound {} → {} (throttled: {} req / {}ms)",
@@ -689,6 +762,13 @@ class GuanacoRouteBuilder extends RouteBuilder {
         return null;
     }
     
+    private SamplingDefinition applySample(ProcessorDefinition<?> parent, GuanacoSampleConfig sampleConfig) {
+        if (sampleConfig.getMessageFrequency() != null) {
+            return parent.sample(sampleConfig.getMessageFrequency());
+        }
+        return parent.sample(Duration.ofMillis(sampleConfig.getSamplePeriodMillis()));
+    }
+
     private ThrottleDefinition applyThrottle(ProcessorDefinition<?> parent, GuanacoThrottlerConfig throttlerConfig) {
         ThrottleDefinition throttle = parent.throttle(constant(throttlerConfig.getRequestsPerPeriod()));
 
@@ -708,6 +788,8 @@ class GuanacoRouteBuilder extends RouteBuilder {
         if (runtimeContext.telemetryListener() == null) {
             if (parent instanceof ChoiceDefinition branch) {
                 branch.to(uri);
+            } else if (parent instanceof SamplingDefinition sampling) {
+                sampling.to(uri);
             } else if (parent instanceof ThrottleDefinition throttle) {
                 throttle.to(uri);
             } else if (parent instanceof DelayDefinition delay) {

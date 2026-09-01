@@ -231,6 +231,8 @@ public class GuanacoContext extends SpringCamelContext {
             validator.validateAggregateConfig(name, routeConfig);
             validator.validateIdempotentConfig(name, routeConfig);
             validator.validateResequenceConfig(name, routeConfig);
+            validator.validateSampleConfig(name, routeConfig);
+            validator.validateThreadsConfig(name, routeConfig);
             validator.validateThrottlerConfig(name, routeConfig);
             validator.validateDelayerConfig(name, routeConfig);
             validator.validateDslOnlyPolicyScope(name, routeConfig, routeInterface);
