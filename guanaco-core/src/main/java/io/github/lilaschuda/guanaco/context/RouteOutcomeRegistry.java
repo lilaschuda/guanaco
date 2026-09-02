@@ -113,15 +113,6 @@ class RouteOutcomeRegistry {
     }
 
     /**
-     * Returns the full frozen set of registered simple names.
-     *
-     * @return set of registered outcome names
-     */
-    public Set<String> knownNames() {
-        return byName.keySet();
-    }
-
-    /**
      * Returns the total count of registered outcome classes.
      *
      * @return registry size

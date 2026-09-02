@@ -126,50 +126,6 @@ class BindingValidator {
     }
 
     /**
-     * Validates that no per-binding circuitBreaker override is declared on an
-     * outcome that isn't a permitted subtype of the processor's sealed
-     * hierarchy. Such an outcome is, by construction, only ever reachable via
-     * Multicast/Split's producerTemplate.send() path, which has no Camel DSL
-     * node for a circuit breaker to wrap.
-     *
-     * <p>
-     * This does NOT catch the residual, undecidable case: a sealed- hierarchy
-     * outcome that is ALSO emitted via Multicast/Split by developer code. In
-     * that case the circuit breaker silently won't apply on the Multicast/Split
-     * path — documented as a known limitation rather than silently ignored.
-     *
-     * @param processorName the name of the processor being validated
-     * @param routeConfig the route configuration loaded for this processor
-     * @param routeInterface the route interface implemented by the processor
-     * @throws InvalidRouteConfigurationException if a circuit breaker override is invalidly declared
-     */
-    public void validateCircuitBreakerScope(String processorName, RouteConfig routeConfig,
-            Class<? extends RouteOutcome<?>> routeInterface) {
-        Class<?>[] permitted = routeInterface.getPermittedSubclasses();
-        if (permitted == null) {
-            return; // whole route is non-sealed (Multicast/Split-only) — nothing to check per-outcome
-        }
-
-        Set<String> permittedNames = Arrays.stream(permitted)
-                .map(Class::getSimpleName).collect(Collectors.toSet());
-
-        for (Map.Entry<String, List<BindingTarget>> entry : routeConfig.getBindings().entrySet()) {
-            if (permittedNames.contains(entry.getKey())) {
-                continue; // reachable via choice() — fine
-            }
-            for (BindingTarget target : entry.getValue()) {
-                if (target.getCircuitBreaker() != null) {
-                    throw new InvalidRouteConfigurationException(
-                            "[" + processorName + "] binding '" + entry.getKey() + "' declares a circuitBreaker "
-                            + "override, but this outcome is not a permitted subtype of " + routeInterface.getName()
-                            + " — it can only be reached via Multicast/Split, which cannot be wrapped by a Camel "
-                            + "circuit breaker DSL node. Remove this override.");
-                }
-            }
-        }
-    }
-
-    /**
      * Validates circuit breaker settings across route-level and binding-level overrides.
      *
      * @param processorName the name of the processor being validated
@@ -345,7 +301,15 @@ class BindingValidator {
     /**
      * Validates that no per-binding DSL-only policy (circuitBreaker, throttler, delayer, sample)
      * is declared on an outcome that isn't a permitted subtype of the
-     * processor's sealed hierarchy.
+     * processor's sealed hierarchy. Such an outcome is, by construction, only
+     * ever reachable via Multicast/Split's producerTemplate.send() path,
+     * which has no Camel DSL node for any of these policies to wrap.
+     *
+     * <p>
+     * This does NOT catch the residual, undecidable case: a sealed-hierarchy
+     * outcome that is ALSO emitted via Multicast/Split by developer code. In
+     * that case the policy silently won't apply on the Multicast/Split path —
+     * documented as a known limitation rather than silently ignored.
      *
      * @param processorName the name of the processor being validated
      * @param routeConfig the route configuration loaded for this processor
