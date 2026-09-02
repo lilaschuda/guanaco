@@ -494,7 +494,6 @@ class GuanacoRouteBuilder extends RouteBuilder {
 
     private void dispatchOutcome(Exchange exchange) throws Exception {
         RouteOutcome<?> outcome = processor.process(exchange);
-        System.out.println("DEBUG: dispatchOutcome RUNNING at " + System.nanoTime());
         if (outcome == null) {
             throw new GuanacoRouteBuilderException(
                     "[" + processorName + "] process() returned null. " +
@@ -567,7 +566,6 @@ class GuanacoRouteBuilder extends RouteBuilder {
                 continue;
             }
             exchange.setProperty(SAGA_OPTION_PROPERTY_PREFIX + key, entry.getValue());
-            System.out.println("DEBUG: applySagaOptions SET property '" + SAGA_OPTION_PROPERTY_PREFIX + key + "' = " + entry.getValue() + " at " + System.nanoTime());
         }
     }
 

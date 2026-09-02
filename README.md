@@ -330,6 +330,8 @@ Guanaco scans the given base package for `@GuanacoRoute`-annotated processors, v
 
 Guanaco depends on and is built entirely on top of [Apache Camel](https://camel.apache.org/). All of Camel's components, connectors, and runtime behavior are available unchanged. See [NOTICE](./NOTICE) for attribution details.
 
+Some of Guanaco's correctness depends on Camel behavior that isn't part of its public DSL contract — see [CAMEL_INTERNALS.md](./CAMEL_INTERNALS.md) for exactly which behaviors, why they matter, and what to re-check on a Camel version bump.
+
 ## License
 
 Apache License 2.0 — see [LICENSE](./LICENSE).
