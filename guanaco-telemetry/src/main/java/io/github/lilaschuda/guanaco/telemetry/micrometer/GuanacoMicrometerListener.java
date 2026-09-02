@@ -85,7 +85,7 @@ public class GuanacoMicrometerListener implements GuanacoTelemetryListener {
                 .record(durationMs, TimeUnit.MILLISECONDS);
     }
 
-@Override
+    @Override
     public void onOutcomeFailed(String processorName, String targetUri, Throwable cause) {
         String exceptionType = cause != null ? cause.getClass().getSimpleName() : "Unknown";
         String exceptionMessage = cause != null ? cause.getMessage() : null;

@@ -40,19 +40,20 @@ Internal classes not listed here (`GuanacoRouteBuilder`, `TopologyInspector`, `B
 
 **Not covered by the v1.0 freeze:** `api.telemetry` (`GuanacoTelemetryListener`, `GuanacoMicrometerListener`). This package ships in the v1.0 jar but is unwired from the engine — no route-building code emits these events yet — so its method signatures may still change ahead of stabilization, without that being treated as a breaking change. See the package's own Javadoc.
 
-## Explicitly deferred to v1.1 and beyond
+## Shipped since v1.0
 
-These were identified early in the EIP-coverage review and deliberately scoped out of v1.0, to keep the initial stable release focused rather than open-ended:
+Wire Tap, Sampling, Threads, ControlBus, Message History, and Saga — all originally listed below as "explicitly deferred" — shipped in v1.1.0. See [CHANGELOG.md](./CHANGELOG.md) for what each one covers, and [CAMEL_INTERNALS.md](./CAMEL_INTERNALS.md) for the Camel-internal behaviors their implementations depend on.
 
-- **Multi-file / modular config loading** — `ConfigLoader` loading a collection of config files rather than a single named resource. A single custom filename has little value on its own; the real use case is splitting config across multiple files. Needs a design discussion resolving collision semantics (duplicate route names across files), where `framework:`/`validation:` lives when config is split across files, and whether file ordering matters — none of this has been discussed yet.
-- **ControlBus** — programmatic route lifecycle management (start/stop/status of routes at runtime)
-- **Wire Tap** — async, non-blocking copies of a message sent to a diagnostic path
-- **Message History** — tracking a message's route through the system via a header
-- **Saga** — distributed transactions with compensating actions
-- **Sampling** — discarding a fraction of throughput above a threshold
-- **Threads** — explicit thread-pool sizing/concurrency tuning on `RouteConfig`
+Two deliberate, known gaps remain from that work, not yet scheduled:
 
-None of these have a design conversation started yet. When one is prioritized, it gets the same treatment every other EIP in this project has had: a design discussion resolving its real forks before any code is written.
+- **Wire Tap's tap-copy success path has no telemetry hook** — only tap *failure* is reported, via `onOutcomeFailed`. Building a success hook would need genuinely new DSL wiring on the tap copy's own completion, not reuse of anything that exists today.
+- **Cross-route `routeId` existence validation** — e.g. verifying a ControlBus `controlbus:route?routeId=X` binding's `routeId` refers to a route that will actually exist. `BindingValidator` currently only has per-processor, local visibility; this needs a genuine topology/route-graph validation pass with visibility across the whole app, which would also be the natural place to add `direct:`/`seda:` cross-reference checks. Not started.
+
+## Explicitly deferred to v1.2 and beyond
+
+- **Multi-file / modular config loading** — `ConfigLoader` loading a collection of config files rather than a single named resource. A single custom filename has little value on its own; the real use case is splitting config across multiple files. One core design question is resolved: on a duplicate binding across files, fail loudly at boot with no precedence assumptions — position within or across files never matters (matching the project's existing `STRICT_DUPLICATE_DETECTION` philosophy). The pre-existing JSON-over-YAML precedence rule for a single logical config carries over unchanged, as a separate, orthogonal rule. Still genuinely undecided: where `framework:`/`validation:` live when config is split across files, and whether file ordering matters at all. Implementation has not started.
+
+When a v1.2 item is prioritized, it gets the same treatment every other EIP in this project has had: a design discussion resolving its real forks before any code is written.
 
 ## Deliberate, permanent non-goals
 
