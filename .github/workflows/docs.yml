@@ -32,7 +32,7 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Generate Javadoc
-        run: mvn -B javadoc:javadoc
+        run: mvn -B javadoc:aggregate
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
