@@ -295,7 +295,7 @@ Guanaco auto-detects YAML or JSON purely by file extension — there's no separa
 
 ## Status
 
-Guanaco is v0.6, pre-1.0. The core pipeline — scanning `@GuanacoRoute` processors, inspecting sealed-interface topology, validating bindings, and generating Camel routes — works end to end, along with Drop, Multicast, Split, Idempotent Consumer, Resequencer, Aggregate, Circuit Breaker, and Throttler. APIs are not yet stable and may change before v1.0.
+Guanaco is v1.1.0. The core pipeline — scanning `@GuanacoRoute` processors, inspecting sealed-interface topology, validating bindings, and generating Camel routes — works end to end, along with the full EIP set: Drop, Multicast, Split, Idempotent Consumer, Resequencer, Aggregate, Circuit Breaker, Throttler, Wire Tap, Sample, Threads, ControlBus, Message History, and Saga. The public API is stable as of v1.0 — see [ROADMAP.md](./ROADMAP.md) for exactly what's frozen — and changes after that point follow semantic versioning. See [CHANGELOG.md](./CHANGELOG.md) for what shipped in each release.
 
 ## A note on the Spring dependency
 
