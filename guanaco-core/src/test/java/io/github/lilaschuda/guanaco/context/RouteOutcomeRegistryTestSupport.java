@@ -2,6 +2,8 @@ package io.github.lilaschuda.guanaco.context;
 
 import io.github.lilaschuda.guanaco.context.RouteOutcomeRegistry;
 import io.github.lilaschuda.guanaco.api.RouteOutcome;
+import io.github.lilaschuda.guanaco.context.RouteOutcomeRegistry;
+import io.github.lilaschuda.guanaco.context.RouteOutcomeRegistry;
 import java.util.Arrays;
 import java.util.Map;
 

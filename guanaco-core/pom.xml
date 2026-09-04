@@ -7,7 +7,7 @@
     <parent>
         <groupId>io.github.lilaschuda</groupId>
         <artifactId>guanaco-parent</artifactId>
-        <version>1.1.0</version>
+        <version>1.2.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -23,6 +23,10 @@
     <name>guanaco</name>
     <description>An idiomatic Java DSL for Apache Camel, with compiler-checked routes.</description>
 
+    <properties>
+        <jspecify.version>1.0.0</jspecify.version>
+    </properties>
+    
     <dependencies>
         <!-- Camel Core -->
         <dependency>
@@ -73,6 +77,17 @@
             <version>${log4j2.version}</version>
         </dependency>
 
+        <!-- Nullness annotations, read by Kotlin's compiler for proper null-safety 
+             inference across the Java/Kotlin boundary. Not needed at runtime. 
+             JSpecify's annotations are pure compile-time signal, so this stays 
+             out of consumers' runtime classpath. -->
+        <dependency>
+            <groupId>org.jspecify</groupId>
+            <artifactId>jspecify</artifactId>
+            <version>${jspecify.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        
         <!-- Test -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>

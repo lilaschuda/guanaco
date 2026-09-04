@@ -1,6 +1,7 @@
 package io.github.lilaschuda.guanaco.config;
 
 import io.github.lilaschuda.guanaco.api.RouteOutcome;
+import org.jspecify.annotations.Nullable;
 import org.apache.camel.model.SagaCompletionMode;
 import org.apache.camel.model.SagaPropagation;
 
@@ -38,13 +39,13 @@ import java.util.List;
  */
 public class GuanacoSagaConfig {
 
-    private String sagaServiceRef;
-    private SagaPropagation propagation;
-    private SagaCompletionMode completionMode;
-    private Long timeoutMs;
+    private @Nullable String sagaServiceRef;
+    private @Nullable SagaPropagation propagation;
+    private @Nullable SagaCompletionMode completionMode;
+    private @Nullable Long timeoutMs;
     private List<String> optionKeys = List.of();
-    private Class<? extends RouteOutcome<?>> compensation;
-    private Class<? extends RouteOutcome<?>> completion;
+    private @Nullable Class<? extends RouteOutcome<?>> compensation;
+    private @Nullable Class<? extends RouteOutcome<?>> completion;
 
     /** Default constructor, used by Jackson when deserializing a saga block. */
     public GuanacoSagaConfig() { }
@@ -62,56 +63,56 @@ public class GuanacoSagaConfig {
      *
      * @return the Spring bean name of the saga service to use, or {@code null} for Camel's default
      */
-    public String getSagaServiceRef() { return sagaServiceRef; }
+    public @Nullable String getSagaServiceRef() { return sagaServiceRef; }
 
     /**
      * Sets the named, shared {@code CamelSagaService} to use.
      *
      * @param sagaServiceRef the Spring bean name of the saga service to use
      */
-    public void setSagaServiceRef(String sagaServiceRef) { this.sagaServiceRef = sagaServiceRef; }
+    public void setSagaServiceRef(@Nullable String sagaServiceRef) { this.sagaServiceRef = sagaServiceRef; }
 
     /**
      * Gets the saga propagation mode.
      *
      * @return the configured propagation mode, or {@code null} to use Camel's default (REQUIRED)
      */
-    public SagaPropagation getPropagation() { return propagation; }
+    public @Nullable SagaPropagation getPropagation() { return propagation; }
 
     /**
      * Sets the saga propagation mode.
      *
      * @param propagation the propagation mode
      */
-    public void setPropagation(SagaPropagation propagation) { this.propagation = propagation; }
+    public void setPropagation(@Nullable SagaPropagation propagation) { this.propagation = propagation; }
 
     /**
      * Gets the saga completion mode.
      *
      * @return the configured completion mode, or {@code null} to use Camel's default (AUTO)
      */
-    public SagaCompletionMode getCompletionMode() { return completionMode; }
+    public @Nullable SagaCompletionMode getCompletionMode() { return completionMode; }
 
     /**
      * Sets the saga completion mode.
      *
      * @param completionMode the completion mode
      */
-    public void setCompletionMode(SagaCompletionMode completionMode) { this.completionMode = completionMode; }
+    public void setCompletionMode(@Nullable SagaCompletionMode completionMode) { this.completionMode = completionMode; }
 
     /**
      * Gets the saga timeout in milliseconds, after which it auto-compensates.
      *
      * @return the configured timeout in milliseconds, or {@code null} for no timeout
      */
-    public Long getTimeoutMs() { return timeoutMs; }
+    public @Nullable Long getTimeoutMs() { return timeoutMs; }
 
     /**
      * Sets the saga timeout in milliseconds.
      *
      * @param timeoutMs the timeout in milliseconds
      */
-    public void setTimeoutMs(Long timeoutMs) { this.timeoutMs = timeoutMs; }
+    public void setTimeoutMs(@Nullable Long timeoutMs) { this.timeoutMs = timeoutMs; }
 
     /**
      * Gets the full set of option names this route's saga steps may snapshot.
@@ -123,9 +124,9 @@ public class GuanacoSagaConfig {
     /**
      * Sets the full set of option names this route's saga steps may snapshot.
      *
-     * @param optionKeys the option keys to declare
+     * @param optionKeys the option keys to declare, or {@code null} to declare none
      */
-    public void setOptionKeys(List<String> optionKeys) {
+    public void setOptionKeys(@Nullable List<String> optionKeys) {
         this.optionKeys = optionKeys != null ? optionKeys : List.of();
     }
 
@@ -134,26 +135,26 @@ public class GuanacoSagaConfig {
      *
      * @return the compensation outcome class, or {@code null} if this saga has no compensation
      */
-    public Class<? extends RouteOutcome<?>> getCompensation() { return compensation; }
+    public @Nullable Class<? extends RouteOutcome<?>> getCompensation() { return compensation; }
 
     /**
      * Sets the outcome type whose binding is this route's compensation endpoint.
      *
      * @param compensation the compensation outcome class
      */
-    public void setCompensation(Class<? extends RouteOutcome<?>> compensation) { this.compensation = compensation; }
+    public void setCompensation(@Nullable Class<? extends RouteOutcome<?>> compensation) { this.compensation = compensation; }
 
     /**
      * Gets the outcome type whose binding is this route's completion endpoint.
      *
      * @return the completion outcome class, or {@code null} if this saga has no completion callback
      */
-    public Class<? extends RouteOutcome<?>> getCompletion() { return completion; }
+    public @Nullable Class<? extends RouteOutcome<?>> getCompletion() { return completion; }
 
     /**
      * Sets the outcome type whose binding is this route's completion endpoint.
      *
      * @param completion the completion outcome class
      */
-    public void setCompletion(Class<? extends RouteOutcome<?>> completion) { this.completion = completion; }
+    public void setCompletion(@Nullable Class<? extends RouteOutcome<?>> completion) { this.completion = completion; }
 }

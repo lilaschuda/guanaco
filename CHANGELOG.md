@@ -6,7 +6,83 @@ this project follows Semantic Versioning: the public API and behavioral
 guarantees documented in `ROADMAP.md`'s "v1.0 API freeze" section will not
 change without a major version bump.
 
-## [1.1.0] -  in progress
+## [1.2.0] - in progress
+
+### Added
+- **`guanaco-kotlin` module** (new, optional Maven module — `guanaco-core` never
+  depends on it, matching `guanaco-telemetry`'s existing opt-in precedent):
+  - **`AsyncOutcomeProcessor<R>` + `OutcomeCallback<R>`**, new in `guanaco-core`'s
+    `api` package: a coroutine-agnostic alternative to `Processor<R>` for route
+    logic that needs to await something without blocking the calling thread. A
+    `@GuanacoRoute` class implements exactly one of the two, never both —
+    implementing both is now rejected at boot (`TopologyInspector`), since which
+    one would silently win previously depended on unguaranteed JVM reflection
+    ordering. Dispatch is wired as a genuine Camel `AsyncProcessor`
+    (`GuanacoRouteBuilder.AsyncDispatchStep`), composed through Camel's own
+    `ReactiveExecutor`/`Pipeline` machinery the same way every other EIP step
+    already is — confirmed by tracing `ChoiceProcessor`, `WireTapProcessor`,
+    `SendProcessor`, and Camel's own `.saga()` processor, all the way down to
+    `AsyncProcessorSupport`, so an async-dispatched route is non-blocking
+    end-to-end, not just at the one step. `dispatchOutcome`'s existing
+    Drop/Split/Multicast/WireTap/SagaStep handling is now shared, unchanged,
+    between the sync and async paths via an extracted `finishDispatch`.
+  - **`SuspendOutcomeProcessor<R>`**, the Kotlin bridge: a `@GuanacoRoute` class
+    extends it and implements a suspending `processSuspending(Exchange): R`
+    instead of `Processor`'s synchronous method. `TopologyInspector` now also
+    checks a processor class's immediate superclass (`getGenericSuperclass()`),
+    not just its directly-implemented interfaces, since a class extending this
+    bridge never implements `AsyncOutcomeProcessor` directly itself.
+  - **`GuanacoCoroutineScopeService`**: one `CoroutineScope` per `CamelContext`,
+    found-or-created lazily (double-checked-locked, stress-tested under 64-way
+    concurrent contention) via `CamelContext.hasService`/`addService` — no
+    dependency injection needed despite `@GuanacoRoute` classes being
+    instantiated via a no-arg reflection constructor. Implements plain
+    `org.apache.camel.Service`, so its lifecycle is tied to the owning
+    context's automatically; cancellation on context stop is reported via
+    `OutcomeCallback.onFailure(...)` before being rethrown, satisfying Camel's
+    `ShutdownStrategy` inflight-exchange tracking while preserving correct
+    Kotlin coroutine-cancellation hygiene.
+  - **Kotlin ergonomics**: named/default-argument factory functions for
+    `Multicast`, `WireTap<T>`, and `SagaStep<T>` (closing the gap where
+    Kotlin's named-argument calling convention doesn't reach across the Java
+    interop boundary onto the framework's own constructors); reified generic
+    helpers `RouteOutcome<*>.bodyAs<T>()` and `Exchange.bodyAs<T>()`.
+  - Comprehensive test coverage for the whole thread: dispatch parity between
+    the sync and async paths (plain outcomes, `Drop`, `WireTap`), a real
+    thread-pool-exhaustion proof that async dispatch genuinely releases a
+    `.threads()` pool's thread rather than merely appearing non-blocking,
+    defensive handling of a misbehaving `AsyncOutcomeProcessor` that throws
+    instead of calling its callback, the classpath-scan path itself (not just
+    direct construction), and the Kotlin bridge exercised against the real
+    `kotlinx-coroutines-core` library (real `delay()`/dispatcher hops, and
+    context-stop cancellation of an in-flight suspend function).
+- **Nullability annotations (JSpecify)** across `api`, `api.telemetry`,
+  `context`, `context.exception`, `config`, `config.exception`, and
+  `testutils` — `@NullMarked` packages with `@Nullable` applied to every
+  field, parameter, and return type actually capable of being null, verified
+  case by case rather than applied uniformly (e.g. `Multicast`/`Split`'s
+  `body()` is genuinely non-null; `WireTap`/`SagaStep`'s is not, since both
+  delegate to a wrapped outcome that may itself be `Drop`).
+
+### Fixed
+- **Two latent NPE risks surfaced by the nullability audit**, both from a
+  declared field default silently not protecting against an explicit `null`
+  through an unguarded setter: `GuanacoConfig.setFramework(...)` and
+  `FrameworkConfig.setValidation(...)` now coalesce an explicit `null` back
+  to their documented default instead of storing it — closing a real gap
+  where `config.getFramework().getValidation()`, called with no null-check
+  in both `ConfigLoader.load()` and `GuanacoContext.wireRoutes()`, could have
+  NPE'd on a literal `framework: null` in routes.yaml/json.
+  `GuanacoTestSupport.withValidation(null)` — a second, reachable path into
+  the same gap — now coalesces the same way.
+
+### Scope
+- Multi-file/modular config loading remains deferred, as noted since
+  `0.11.0` — implementation still hasn't started; its two open design
+  questions (where `framework:`/`validation:` live when config is split
+  across files, and whether file ordering matters) are unchanged.
+
+## [1.1.0] - 2026-09-02
 
 ### Added
 - **Telemetry engine wiring**: Instrumented Idempotent, Resequence, Aggregate,

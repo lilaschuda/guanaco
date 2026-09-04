@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.config.exception;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Thrown when guanaco configuration is missing, malformed, or fails validation.
  */
@@ -20,7 +22,7 @@ public class GuanacoConfigException extends RuntimeException {
      * @param message description of the configuration problem
      * @param cause the underlying cause, if any
      */
-    public GuanacoConfigException(String message, Throwable cause) {
+    public GuanacoConfigException(String message, @Nullable Throwable cause) {
         super(message, cause);
     }
 }

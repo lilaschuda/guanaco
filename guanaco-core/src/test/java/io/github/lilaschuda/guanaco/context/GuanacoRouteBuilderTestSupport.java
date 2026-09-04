@@ -77,6 +77,31 @@ public abstract class GuanacoRouteBuilderTestSupport {
     }
 
     /**
+     * Async-flavored counterpart to the Processor-based registerRoute above,
+     * for AsyncOutcomeProcessor tests. Mirrors it exactly, down to the
+     * signature shape.
+     */
+    protected void registerRoute(
+            io.github.lilaschuda.guanaco.api.AsyncOutcomeProcessor<? extends RouteOutcome<?>> processor,
+            Class<? extends RouteOutcome<?>> routeInterface,
+            RouteConfig config,
+            String processorName,
+            RouteOutcomeRegistry registry) throws Exception {
+        registerRoute(processor, routeInterface, config, processorName,
+                new GuanacoRuntimeContext(registry, Map.of(), Map.of(), null));
+    }
+
+    protected void registerRoute(
+            io.github.lilaschuda.guanaco.api.AsyncOutcomeProcessor<? extends RouteOutcome<?>> processor,
+            Class<? extends RouteOutcome<?>> routeInterface,
+            RouteConfig config,
+            String processorName,
+            GuanacoRuntimeContext runtimeContext) throws Exception {
+        context.addRoutes(new GuanacoRouteBuilder(
+                processor, routeInterface, config, processorName, runtimeContext));
+    }
+    
+    /**
      * Builds a RouteConfig with a single plain-URI (no circuit breaker)
      * binding target per outcome name. Internally builds the
      * Map&lt;String, List&lt;BindingTarget&gt;&gt; shape RouteConfig now

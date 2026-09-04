@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.context.exception;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Thrown when a RouteConfig's structural shape is invalid — e.g. an
  * {@code aggregate:} block missing a required field or completion condition.
@@ -22,5 +24,5 @@ public class InvalidRouteConfigurationException extends RuntimeException {
      * @param message description of the structural configuration defect
      * @param cause the underlying cause, if any
      */
-    public InvalidRouteConfigurationException(String message, Throwable cause) { super(message, cause); }
+    public InvalidRouteConfigurationException(String message, @Nullable Throwable cause) { super(message, cause); }
 }

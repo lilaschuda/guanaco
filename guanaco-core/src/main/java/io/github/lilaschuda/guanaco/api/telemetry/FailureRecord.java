@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.api.telemetry;
 
+import org.jspecify.annotations.Nullable;
+
 import java.time.Instant;
 
 /**
@@ -16,5 +18,5 @@ public record FailureRecord(
         String processorName,
         String targetUri,
         String exceptionType,
-        String exceptionMessage
+        @Nullable String exceptionMessage
 ) {}

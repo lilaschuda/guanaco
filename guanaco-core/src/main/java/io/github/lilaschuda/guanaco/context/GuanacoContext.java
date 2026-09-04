@@ -1,5 +1,6 @@
 package io.github.lilaschuda.guanaco.context;
 
+import io.github.lilaschuda.guanaco.api.AsyncOutcomeProcessor;
 import io.github.lilaschuda.guanaco.api.GuanacoDelayStrategy;
 import io.github.lilaschuda.guanaco.api.RouteOutcome;
 import io.github.lilaschuda.guanaco.config.ConfigLoader;
@@ -8,6 +9,7 @@ import io.github.lilaschuda.guanaco.config.RouteConfig;
 import io.github.lilaschuda.guanaco.api.GuanacoRoute;
 import io.github.lilaschuda.guanaco.api.Processor;
 import io.github.lilaschuda.guanaco.api.telemetry.GuanacoTelemetryListener;
+import io.github.lilaschuda.guanaco.context.exception.GuanacoRouteBuilderException;
 import org.apache.camel.AggregationStrategy;
 import org.apache.camel.saga.InMemorySagaService;
 import org.reflections.Reflections;
@@ -225,15 +227,19 @@ public class GuanacoContext extends SpringCamelContext {
         Reflections reflections = new Reflections(basePackage);
         Set<Class<?>> rawProcessorClasses = reflections.getTypesAnnotatedWith(GuanacoRoute.class);
 
-        @SuppressWarnings("unchecked")
-        Set<Class<? extends Processor<? extends RouteOutcome<?>>>> processorClasses = rawProcessorClasses.stream()
-                .filter(Processor.class::isAssignableFrom)
-                .map(clazz -> (Class<? extends Processor<? extends RouteOutcome<?>>>) clazz)
+        // Widened from Processor-only: a @GuanacoRoute class may implement
+        // either Processor or AsyncOutcomeProcessor, never both. A single
+        // generic bound can't honestly describe "assignable to one of two
+        // unrelated interfaces", so this stays Class<?> rather than trying
+        // to preserve a tight Processor<...>-specific type through the
+        // stream, the way it did before AsyncOutcomeProcessor existed.
+        Set<Class<?>> processorClasses = rawProcessorClasses.stream()
+                .filter(c -> Processor.class.isAssignableFrom(c) || AsyncOutcomeProcessor.class.isAssignableFrom(c))
                 .collect(Collectors.toSet());
 
         log.info("Found {} @GuanacoRoute processor(s) in package '{}'", processorClasses.size(), basePackage);
 
-        for (Class<? extends Processor<? extends RouteOutcome<?>>> processorClass : processorClasses) {
+        for (Class<?> processorClass : processorClasses) {
             String name = resolveProcessorName(processorClass);
             RouteConfig routeConfig = routeConfigs.get(name);
 
@@ -262,11 +268,28 @@ public class GuanacoContext extends SpringCamelContext {
             validator.validateDslOnlyPolicyScope(name, routeConfig, routeInterface);
             validator.validateCircuitBreakerConfig(name, routeConfig);
 
-            Processor<RouteOutcome<?>> instance
-                    = (Processor<RouteOutcome<?>>) processorClass.getDeclaredConstructor().newInstance();
+            // Instantiate once as a raw Object, then branch on which of the
+            // two processor contracts it actually implements -- the earlier
+            // filter already guarantees it's one or the other.
+            Object rawInstance = processorClass.getDeclaredConstructor().newInstance();
 
-            GuanacoRouteBuilder builder = new GuanacoRouteBuilder(
-                    instance, routeInterface, routeConfig, name, runtimeContext);
+            GuanacoRouteBuilder builder;
+            if (rawInstance instanceof Processor<?> syncProcessor) {
+                @SuppressWarnings("unchecked")
+                Processor<RouteOutcome<?>> typedProcessor = (Processor<RouteOutcome<?>>) syncProcessor;
+                builder = new GuanacoRouteBuilder(typedProcessor, routeInterface, routeConfig, name, runtimeContext);
+            } else if (rawInstance instanceof AsyncOutcomeProcessor<?> asyncProcessor) {
+                @SuppressWarnings("unchecked")
+                AsyncOutcomeProcessor<RouteOutcome<?>> typedProcessor = (AsyncOutcomeProcessor<RouteOutcome<?>>) asyncProcessor;
+                builder = new GuanacoRouteBuilder(typedProcessor, routeInterface, routeConfig, name, runtimeContext);
+            } else {
+                // Unreachable in practice: the filter above already restricted
+                // processorClasses to types assignable to one of these two.
+                throw new GuanacoRouteBuilderException(
+                        "[" + name + "] " + processorClass.getName()
+                        + " implements neither Processor nor AsyncOutcomeProcessor.");
+            }
+
             this.addRoutes(builder);
 
             log.info("[{}] Route registered: {} → {} outcome(s)", name, routeConfig.getFrom(), outcomeNames.size());
@@ -274,8 +297,7 @@ public class GuanacoContext extends SpringCamelContext {
 
         loadLegacyXmlRoutes("META-INF/spring/camel-context.xml");
         log.info("=== camel-guanaco route wiring complete ===");
-    }
-    
+    }   
     /**
      * Loads legacy Camel XML {@code <route>} definitions from a classpath resource.
      *

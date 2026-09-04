@@ -60,6 +60,32 @@ class GuanacoRouteBuilderWireTapTest extends GuanacoRouteBuilderTestSupport {
     }
 
     @Test
+    void primaryDispatchesNormally_andTapReceivesItsOwnBody_viaAsyncProcessor() throws Exception {
+        RouteOutcomeRegistry registry = RouteOutcomeRegistryTestSupport.of(ToInventory.class, ToAuditLog.class);
+        RouteConfig config = routeConfig("direct:orders",
+                Map.of("ToInventory", "mock:inventory", "ToAuditLog", "mock:audit"));
+
+        io.github.lilaschuda.guanaco.api.AsyncOutcomeProcessor<RouteOutcome<?>> processor = (exchange, callback) -> {
+            String body = exchange.getIn().getBody(String.class);
+            callback.onOutcome(new WireTap<>(new ToInventory(body), new ToAuditLog("audit-copy-of:" + body)));
+        };
+
+        registerRoute(processor, ORDER_ROUTE_CLASS, config, "AsyncWireTapTest",
+                new GuanacoRuntimeContext(registry, Map.of(), Map.of(), null));
+        context.start();
+
+        MockEndpoint inventory = context.getEndpoint("mock:inventory", MockEndpoint.class);
+        inventory.expectedBodiesReceived("hello");
+
+        MockEndpoint audit = context.getEndpoint("mock:audit", MockEndpoint.class);
+        audit.expectedBodiesReceived("audit-copy-of:hello");
+
+        context.createProducerTemplate().sendBody("direct:orders", "hello");
+
+        MockEndpoint.assertIsSatisfied(context, 5, java.util.concurrent.TimeUnit.SECONDS);
+    }
+    
+    @Test
     void tapFailure_neverAffectsPrimaryDelivery_andReportsViaTelemetry() throws Exception {
         RouteOutcomeRegistry registry = RouteOutcomeRegistryTestSupport.of(ToInventory.class, ToAuditLog.class);
         RouteConfig config = routeConfig("direct:orders",

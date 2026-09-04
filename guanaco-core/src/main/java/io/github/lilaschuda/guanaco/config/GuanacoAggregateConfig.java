@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.config;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Optional aggregation configuration for a route, declared as a nested
  * {@code aggregate:} block within a RouteConfig — modeled identically to how
@@ -18,10 +20,10 @@ package io.github.lilaschuda.guanaco.config;
  */
 public class GuanacoAggregateConfig {
 
-    private String correlationHeader;
-    private String strategyRef;
-    private Integer completionSize;
-    private Long completionTimeoutMs;
+    private @Nullable String correlationHeader;
+    private @Nullable String strategyRef;
+    private @Nullable Integer completionSize;
+    private @Nullable Long completionTimeoutMs;
 
     /** Default constructor, used by Jackson when deserializing an aggregate block. */
     public GuanacoAggregateConfig() { }
@@ -29,56 +31,58 @@ public class GuanacoAggregateConfig {
     /**
      * Gets the header used to correlate messages into the same aggregation group.
      *
-     * @return the header used to correlate messages into the same aggregation group
+     * @return the header used to correlate messages into the same aggregation group,
+     *         or {@code null} if not set
      */
-    public String getCorrelationHeader() { return correlationHeader; }
+    public @Nullable String getCorrelationHeader() { return correlationHeader; }
 
     /**
      * Sets the header used to correlate messages into the same aggregation group.
      *
      * @param correlationHeader the header used to correlate messages into the same aggregation group
      */
-    public void setCorrelationHeader(String correlationHeader) { this.correlationHeader = correlationHeader; }
+    public void setCorrelationHeader(@Nullable String correlationHeader) { this.correlationHeader = correlationHeader; }
 
     /**
      * Gets the name of the registered aggregation strategy.
      *
-     * @return the name of the registered {@link org.apache.camel.AggregationStrategy} to merge with
+     * @return the name of the registered {@link org.apache.camel.AggregationStrategy} to merge with,
+     *         or {@code null} if not set
      */
-    public String getStrategyRef() { return strategyRef; }
+    public @Nullable String getStrategyRef() { return strategyRef; }
 
     /**
      * Sets the name of the registered aggregation strategy.
      *
      * @param strategyRef the name of the registered {@link org.apache.camel.AggregationStrategy} to merge with
      */
-    public void setStrategyRef(String strategyRef) { this.strategyRef = strategyRef; }
+    public void setStrategyRef(@Nullable String strategyRef) { this.strategyRef = strategyRef; }
 
     /**
      * Gets the message-count completion threshold.
      *
      * @return the message-count completion threshold, or {@code null} if not used
      */
-    public Integer getCompletionSize() { return completionSize; }
+    public @Nullable Integer getCompletionSize() { return completionSize; }
 
     /**
      * Sets the message-count completion threshold.
      *
      * @param completionSize the message-count completion threshold
      */
-    public void setCompletionSize(Integer completionSize) { this.completionSize = completionSize; }
+    public void setCompletionSize(@Nullable Integer completionSize) { this.completionSize = completionSize; }
 
     /**
      * Gets the timeout-based completion threshold.
      *
      * @return the timeout-based completion threshold in milliseconds, or {@code null} if not used
      */
-    public Long getCompletionTimeoutMs() { return completionTimeoutMs; }
+    public @Nullable Long getCompletionTimeoutMs() { return completionTimeoutMs; }
 
     /**
      * Sets the timeout-based completion threshold.
      *
      * @param completionTimeoutMs the timeout-based completion threshold in milliseconds
      */
-    public void setCompletionTimeoutMs(Long completionTimeoutMs) { this.completionTimeoutMs = completionTimeoutMs; }
+    public void setCompletionTimeoutMs(@Nullable Long completionTimeoutMs) { this.completionTimeoutMs = completionTimeoutMs; }
 }

@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.context.exception;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Thrown when a validated, correctly-configured route still fails to translate
  * into a working Camel route graph — e.g. an unexpected Camel DSL failure while
@@ -22,5 +24,5 @@ public class GuanacoRouteBuilderException extends RuntimeException {
      * @param message description of the route-building failure
      * @param cause the underlying Camel DSL exception
      */
-    public GuanacoRouteBuilderException(String message, Throwable cause) { super(message, cause); }
+    public GuanacoRouteBuilderException(String message, @Nullable Throwable cause) { super(message, cause); }
 }

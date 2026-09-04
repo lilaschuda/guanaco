@@ -1,6 +1,6 @@
 package io.github.lilaschuda.guanaco.api;
 
-import io.github.lilaschuda.guanaco.api.RouteOutcome;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import org.apache.camel.AggregationStrategy;
@@ -26,7 +26,7 @@ import org.apache.camel.AggregationStrategy;
 public final class Split implements RouteOutcome<List<? extends RouteOutcome<?>>> {
 
     private final List<? extends RouteOutcome<?>> items;
-    private final AggregationStrategy aggregationStrategy;
+    private final @Nullable AggregationStrategy aggregationStrategy;
 
     /**
      * Creates a split outcome with split-and-forget semantics (no aggregation).
@@ -43,7 +43,7 @@ public final class Split implements RouteOutcome<List<? extends RouteOutcome<?>>
      * @param items the individual routing outcome items to dispatch
      * @param aggregationStrategy the strategy used to aggregate results, or {@code null} for split-and-forget
      */
-    public Split(List<? extends RouteOutcome<?>> items, AggregationStrategy aggregationStrategy) {
+    public Split(List<? extends RouteOutcome<?>> items, @Nullable AggregationStrategy aggregationStrategy) {
         this.items = List.copyOf(items);
         this.aggregationStrategy = aggregationStrategy;
     }
@@ -67,7 +67,7 @@ public final class Split implements RouteOutcome<List<? extends RouteOutcome<?>>
      *
      * @return the {@link AggregationStrategy}, or {@code null} if split-and-forget
      */
-    public AggregationStrategy aggregationStrategy() {
+    public @Nullable AggregationStrategy aggregationStrategy() {
         return aggregationStrategy;
     }
 }

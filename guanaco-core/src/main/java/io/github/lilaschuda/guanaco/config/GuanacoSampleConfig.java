@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.config;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Sampling policy — a hard, drop-based admission gate, not a queue like
  * {@link GuanacoThrottlerConfig}/{@link GuanacoDelayerConfig}. A message
@@ -33,8 +35,8 @@ package io.github.lilaschuda.guanaco.config;
  */
 public class GuanacoSampleConfig {
 
-    private Long messageFrequency;
-    private Long samplePeriodMillis;
+    private @Nullable Long messageFrequency;
+    private @Nullable Long samplePeriodMillis;
 
     /** Default constructor, used by Jackson when deserializing a sample block. */
     public GuanacoSampleConfig() { }
@@ -44,26 +46,26 @@ public class GuanacoSampleConfig {
      *
      * @return the configured message frequency, or {@code null} if using samplePeriodMillis instead
      */
-    public Long getMessageFrequency() { return messageFrequency; }
+    public @Nullable Long getMessageFrequency() { return messageFrequency; }
 
     /**
      * Sets the message frequency (1 out of every N messages passes).
      *
      * @param messageFrequency the message frequency
      */
-    public void setMessageFrequency(Long messageFrequency) { this.messageFrequency = messageFrequency; }
+    public void setMessageFrequency(@Nullable Long messageFrequency) { this.messageFrequency = messageFrequency; }
 
     /**
      * Gets the configured sample period in milliseconds (at most one message per window passes).
      *
      * @return the configured sample period in milliseconds, or {@code null} if using messageFrequency instead
      */
-    public Long getSamplePeriodMillis() { return samplePeriodMillis; }
+    public @Nullable Long getSamplePeriodMillis() { return samplePeriodMillis; }
 
     /**
      * Sets the sample period in milliseconds (at most one message per window passes).
      *
      * @param samplePeriodMillis the sample period in milliseconds
      */
-    public void setSamplePeriodMillis(Long samplePeriodMillis) { this.samplePeriodMillis = samplePeriodMillis; }
+    public void setSamplePeriodMillis(@Nullable Long samplePeriodMillis) { this.samplePeriodMillis = samplePeriodMillis; }
 }

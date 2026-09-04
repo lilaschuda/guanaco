@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.api;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Explicitly discards the message — no downstream endpoint receives it.
  *
@@ -16,5 +18,5 @@ public final class Drop implements RouteOutcome<Void> {
     private Drop() {}
 
     @Override
-    public Void body() { return null; }
+    public @Nullable Void body() { return null; }
 }

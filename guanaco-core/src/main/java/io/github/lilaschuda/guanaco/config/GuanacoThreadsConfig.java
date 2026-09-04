@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.config;
 
+import org.jspecify.annotations.Nullable;
+
 import org.apache.camel.util.concurrent.ThreadPoolRejectedPolicy;
 
 /**
@@ -37,13 +39,13 @@ import org.apache.camel.util.concurrent.ThreadPoolRejectedPolicy;
  */
 public class GuanacoThreadsConfig {
 
-    private Integer poolSize;
-    private Integer maxPoolSize;
-    private String threadName;
-    private ThreadPoolRejectedPolicy rejectedPolicy;
-    private Boolean callerRunsWhenRejected;
+    private @Nullable Integer poolSize;
+    private @Nullable Integer maxPoolSize;
+    private @Nullable String threadName;
+    private @Nullable ThreadPoolRejectedPolicy rejectedPolicy;
+    private @Nullable Boolean callerRunsWhenRejected;
 
-    private String executorServiceRef;
+    private @Nullable String executorServiceRef;
 
     /** Default constructor, used by Jackson when deserializing a threads block. */
     public GuanacoThreadsConfig() { }
@@ -53,70 +55,70 @@ public class GuanacoThreadsConfig {
      *
      * @return the configured core pool size, or {@code null} to use Camel's default
      */
-    public Integer getPoolSize() { return poolSize; }
+    public @Nullable Integer getPoolSize() { return poolSize; }
 
     /**
      * Sets the core pool size.
      *
      * @param poolSize the core pool size
      */
-    public void setPoolSize(Integer poolSize) { this.poolSize = poolSize; }
+    public void setPoolSize(@Nullable Integer poolSize) { this.poolSize = poolSize; }
 
     /**
      * Gets the configured maximum pool size.
      *
      * @return the configured maximum pool size, or {@code null} to use Camel's default
      */
-    public Integer getMaxPoolSize() { return maxPoolSize; }
+    public @Nullable Integer getMaxPoolSize() { return maxPoolSize; }
 
     /**
      * Sets the maximum pool size.
      *
      * @param maxPoolSize the maximum pool size
      */
-    public void setMaxPoolSize(Integer maxPoolSize) { this.maxPoolSize = maxPoolSize; }
+    public void setMaxPoolSize(@Nullable Integer maxPoolSize) { this.maxPoolSize = maxPoolSize; }
 
     /**
      * Gets the configured thread name pattern.
      *
      * @return the configured thread name pattern, or {@code null} to use Camel's default
      */
-    public String getThreadName() { return threadName; }
+    public @Nullable String getThreadName() { return threadName; }
 
     /**
      * Sets the thread name pattern.
      *
      * @param threadName the thread name pattern
      */
-    public void setThreadName(String threadName) { this.threadName = threadName; }
+    public void setThreadName(@Nullable String threadName) { this.threadName = threadName; }
 
     /**
      * Gets the configured rejection policy.
      *
      * @return the configured rejection policy, or {@code null} to use Camel's default
      */
-    public ThreadPoolRejectedPolicy getRejectedPolicy() { return rejectedPolicy; }
+    public @Nullable ThreadPoolRejectedPolicy getRejectedPolicy() { return rejectedPolicy; }
 
     /**
      * Sets the rejection policy.
      *
      * @param rejectedPolicy the rejection policy
      */
-    public void setRejectedPolicy(ThreadPoolRejectedPolicy rejectedPolicy) { this.rejectedPolicy = rejectedPolicy; }
+    public void setRejectedPolicy(@Nullable ThreadPoolRejectedPolicy rejectedPolicy) { this.rejectedPolicy = rejectedPolicy; }
 
     /**
      * Gets whether the caller thread runs a rejected task as a fallback.
      *
      * @return whether the caller thread runs a rejected task as a fallback, or {@code null} to use Camel's default
      */
-    public Boolean getCallerRunsWhenRejected() { return callerRunsWhenRejected; }
+    public @Nullable Boolean getCallerRunsWhenRejected() { return callerRunsWhenRejected; }
 
     /**
      * Sets whether the caller thread runs a rejected task as a fallback.
      *
      * @param callerRunsWhenRejected whether the caller thread runs a rejected task as a fallback
      */
-    public void setCallerRunsWhenRejected(Boolean callerRunsWhenRejected) {
+    public void setCallerRunsWhenRejected(@Nullable Boolean callerRunsWhenRejected) {
         this.callerRunsWhenRejected = callerRunsWhenRejected;
     }
 
@@ -125,12 +127,12 @@ public class GuanacoThreadsConfig {
      *
      * @return the Spring bean name of the executor service to use, or {@code null} if using an inline pool instead
      */
-    public String getExecutorServiceRef() { return executorServiceRef; }
+    public @Nullable String getExecutorServiceRef() { return executorServiceRef; }
 
     /**
      * Sets the named/shared executor service reference.
      *
      * @param executorServiceRef the Spring bean name of the executor service to use
      */
-    public void setExecutorServiceRef(String executorServiceRef) { this.executorServiceRef = executorServiceRef; }
+    public void setExecutorServiceRef(@Nullable String executorServiceRef) { this.executorServiceRef = executorServiceRef; }
 }

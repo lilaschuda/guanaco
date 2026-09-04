@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.config;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Optional idempotent-consumer configuration for a route, declared as a
  * nested {@code idempotent:} block — modeled identically to {@code aggregate}
@@ -34,11 +36,11 @@ public class GuanacoIdempotentConfig {
     /** Default {@code skipDuplicate} setting, used when {@code skipDuplicate} is not set. */
     public static final boolean DEFAULT_SKIP_DUPLICATE = true;
 
-    private String messageIdHeader;
-    private Integer capacity;
-    private Boolean eager;
-    private Boolean removeOnFailure;
-    private Boolean skipDuplicate;
+    private @Nullable String messageIdHeader;
+    private @Nullable Integer capacity;
+    private @Nullable Boolean eager;
+    private @Nullable Boolean removeOnFailure;
+    private @Nullable Boolean skipDuplicate;
 
     /** Default constructor, used by Jackson when deserializing an idempotent block. */
     public GuanacoIdempotentConfig() { }
@@ -46,30 +48,30 @@ public class GuanacoIdempotentConfig {
     /**
      * Gets the header used to identify a message for duplicate detection.
      *
-     * @return the header used to identify a message for duplicate detection
+     * @return the header used to identify a message for duplicate detection, or {@code null} if not set
      */
-    public String getMessageIdHeader() { return messageIdHeader; }
+    public @Nullable String getMessageIdHeader() { return messageIdHeader; }
 
     /**
      * Sets the header used to identify a message for duplicate detection.
      *
      * @param messageIdHeader the header used to identify a message for duplicate detection
      */
-    public void setMessageIdHeader(String messageIdHeader) { this.messageIdHeader = messageIdHeader; }
+    public void setMessageIdHeader(@Nullable String messageIdHeader) { this.messageIdHeader = messageIdHeader; }
 
     /**
      * Gets the explicitly configured repository capacity.
      *
      * @return the explicitly configured repository capacity, or {@code null} if not set
      */
-    public Integer getCapacity() { return capacity; }
+    public @Nullable Integer getCapacity() { return capacity; }
 
     /**
      * Sets the idempotent repository capacity.
      *
      * @param capacity the idempotent repository capacity
      */
-    public void setCapacity(Integer capacity) { this.capacity = capacity; }
+    public void setCapacity(@Nullable Integer capacity) { this.capacity = capacity; }
 
     /**
      * Resolves the effective repository capacity.
@@ -85,14 +87,14 @@ public class GuanacoIdempotentConfig {
      *
      * @return the explicitly configured eager-filtering state, or {@code null} if not set
      */
-    public Boolean getEager() { return eager; }
+    public @Nullable Boolean getEager() { return eager; }
 
     /**
      * Sets whether duplicates are filtered before or after processing.
      *
      * @param eager whether duplicates are filtered before or after processing
      */
-    public void setEager(Boolean eager) { this.eager = eager; }
+    public void setEager(@Nullable Boolean eager) { this.eager = eager; }
 
     /**
      * Resolves the effective eager-filtering state.
@@ -108,14 +110,14 @@ public class GuanacoIdempotentConfig {
      *
      * @return the explicitly configured remove-on-failure state, or {@code null} if not set
      */
-    public Boolean getRemoveOnFailure() { return removeOnFailure; }
+    public @Nullable Boolean getRemoveOnFailure() { return removeOnFailure; }
 
     /**
      * Sets whether a message's id is removed from the repository if processing fails.
      *
      * @param removeOnFailure whether a message's id is removed from the repository if processing fails
      */
-    public void setRemoveOnFailure(Boolean removeOnFailure) { this.removeOnFailure = removeOnFailure; }
+    public void setRemoveOnFailure(@Nullable Boolean removeOnFailure) { this.removeOnFailure = removeOnFailure; }
 
     /**
      * Resolves the effective remove-on-failure state.
@@ -131,14 +133,14 @@ public class GuanacoIdempotentConfig {
      *
      * @return the explicitly configured skip-duplicate state, or {@code null} if not set
      */
-    public Boolean getSkipDuplicate() { return skipDuplicate; }
+    public @Nullable Boolean getSkipDuplicate() { return skipDuplicate; }
 
     /**
      * Sets whether a detected duplicate is skipped rather than processed.
      *
      * @param skipDuplicate whether a detected duplicate is skipped rather than processed
      */
-    public void setSkipDuplicate(Boolean skipDuplicate) { this.skipDuplicate = skipDuplicate; }
+    public void setSkipDuplicate(@Nullable Boolean skipDuplicate) { this.skipDuplicate = skipDuplicate; }
 
     /**
      * Resolves the effective skip-duplicate state.

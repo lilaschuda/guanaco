@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.config;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Delay policy — declarable at route level (default for every binding on
  * that route) or per-binding (overrides the route default for that one
@@ -28,10 +30,10 @@ package io.github.lilaschuda.guanaco.config;
  */
 public class GuanacoDelayerConfig {
 
-    private Boolean enabled;
-    private Long delayMs;
-    private String delayStrategyRef;
-    private Boolean asyncDelayed;
+    private @Nullable Boolean enabled;
+    private @Nullable Long delayMs;
+    private @Nullable String delayStrategyRef;
+    private @Nullable Boolean asyncDelayed;
 
     /** Default constructor, used by Jackson when deserializing a delayer block. */
     public GuanacoDelayerConfig() { }
@@ -41,14 +43,14 @@ public class GuanacoDelayerConfig {
      *
      * @return the explicitly configured enabled state, or {@code null} if not set
      */
-    public Boolean getEnabled() { return enabled; }
+    public @Nullable Boolean getEnabled() { return enabled; }
 
     /**
      * Sets whether this delay policy is active.
      *
      * @param enabled whether this delay policy is active
      */
-    public void setEnabled(Boolean enabled) { this.enabled = enabled; }
+    public void setEnabled(@Nullable Boolean enabled) { this.enabled = enabled; }
 
     /**
      * Resolves the effective enabled state.
@@ -65,14 +67,14 @@ public class GuanacoDelayerConfig {
      *
      * @return the fixed delay in milliseconds, or {@code null} if a {@code delayStrategyRef} is used instead
      */
-    public Long getDelayMs() { return delayMs; }
+    public @Nullable Long getDelayMs() { return delayMs; }
 
     /**
      * Sets the fixed delay in milliseconds.
      *
      * @param delayMs the fixed delay in milliseconds
      */
-    public void setDelayMs(Long delayMs) { this.delayMs = delayMs; }
+    public void setDelayMs(@Nullable Long delayMs) { this.delayMs = delayMs; }
 
     /**
      * Gets the name of the registered delay strategy.
@@ -80,28 +82,28 @@ public class GuanacoDelayerConfig {
      * @return the name of the registered {@link io.github.lilaschuda.guanaco.api.GuanacoDelayStrategy}
      *         to compute the delay with, or {@code null} if a fixed {@code delayMs} is used instead
      */
-    public String getDelayStrategyRef() { return delayStrategyRef; }
+    public @Nullable String getDelayStrategyRef() { return delayStrategyRef; }
 
     /**
      * Sets the name of the registered delay strategy.
      *
      * @param delayStrategyRef the name of the registered delay strategy to compute the delay with
      */
-    public void setDelayStrategyRef(String delayStrategyRef) { this.delayStrategyRef = delayStrategyRef; }
+    public void setDelayStrategyRef(@Nullable String delayStrategyRef) { this.delayStrategyRef = delayStrategyRef; }
 
     /**
      * Gets the explicitly configured async-delayed state.
      *
      * @return the explicitly configured async-delayed state, or {@code null} if not set
      */
-    public Boolean getAsyncDelayed() { return asyncDelayed; }
+    public @Nullable Boolean getAsyncDelayed() { return asyncDelayed; }
 
     /**
      * Sets whether the delay should be non-blocking.
      *
      * @param asyncDelayed whether the delay should be non-blocking
      */
-    public void setAsyncDelayed(Boolean asyncDelayed) { this.asyncDelayed = asyncDelayed; }
+    public void setAsyncDelayed(@Nullable Boolean asyncDelayed) { this.asyncDelayed = asyncDelayed; }
 
     /**
      * Resolves the effective async-delayed state.

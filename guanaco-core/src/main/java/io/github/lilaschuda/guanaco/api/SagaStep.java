@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.api;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Map;
 
 /**
@@ -28,7 +30,8 @@ import java.util.Map;
  * {@code process(Exchange)}, where the real data already lives.
  *
  * <p>{@code body()} delegates to {@code primary} — participating in a
- * saga is a side concern, not part of the outcome's own payload contract.
+ * saga is a side concern, not part of the outcome's own payload contract,
+ * and inherits whatever nullability {@code primary}'s own body() has.
  *
  * <p>Usage:
  *   {@code return new SagaStep<>(new ToInventory(order), Map.of("orderId", order.id()));}
@@ -66,7 +69,7 @@ public final class SagaStep<T> implements RouteOutcome<T> {
     }
 
     @Override
-    public T body() {
+    public @Nullable T body() {
         return primary.body();
     }
 

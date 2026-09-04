@@ -21,5 +21,11 @@
  * of any engine wiring work, without that being treated as a breaking
  * change under semantic versioning. Treat it as a preview of the intended
  * shape, not a locked contract.
+ *
+ * <p>{@code @NullMarked}: same non-null-by-default convention as the
+ * {@code api} package.
  */
+@NullMarked
 package io.github.lilaschuda.guanaco.api.telemetry;
+
+import org.jspecify.annotations.NullMarked;

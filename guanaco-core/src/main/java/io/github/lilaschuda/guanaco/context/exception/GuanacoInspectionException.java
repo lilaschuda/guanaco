@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.context.exception;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Thrown when a {@link io.github.lilaschuda.guanaco.api.GuanacoRoute}-annotated processor's declared route topology
  * can't be extracted — e.g. its {@link io.github.lilaschuda.guanaco.api.Processor}
@@ -21,5 +23,5 @@ public class GuanacoInspectionException extends RuntimeException {
      * @param message description of the topology inspection failure
      * @param cause the underlying reflection or class-loading failure
      */
-    public GuanacoInspectionException(String message, Throwable cause) { super(message, cause); }
+    public GuanacoInspectionException(String message, @Nullable Throwable cause) { super(message, cause); }
 }

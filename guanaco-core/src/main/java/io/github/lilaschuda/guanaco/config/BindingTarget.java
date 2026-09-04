@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.config;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * A single binding destination: a URI, plus an optional per-binding
  * circuitBreaker override. Accepted in routes.yaml/json as either a plain
@@ -9,10 +11,10 @@ package io.github.lilaschuda.guanaco.config;
  */
 public class BindingTarget {
 
-    private String uri;
-    private GuanacoCircuitBreakerConfig circuitBreaker;
-    private GuanacoThrottlerConfig throttler;
-    private GuanacoDelayerConfig delayer;
+    private @Nullable String uri;
+    private @Nullable GuanacoCircuitBreakerConfig circuitBreaker;
+    private @Nullable GuanacoThrottlerConfig throttler;
+    private @Nullable GuanacoDelayerConfig delayer;
 
     /**
      * This binding's egress sample policy — applied only during dispatch
@@ -20,7 +22,7 @@ public class BindingTarget {
      * Independent of any route-level sample policy; does not inherit from
      * or override it. See {@link GuanacoSampleConfig}.
      */
-    private GuanacoSampleConfig sample;
+    private @Nullable GuanacoSampleConfig sample;
 
     /** Default constructor, used by Jackson when deserializing a binding target. */
     public BindingTarget() { }
@@ -28,70 +30,71 @@ public class BindingTarget {
     /**
      * Gets the endpoint URI for this binding.
      *
-     * @return the endpoint URI for this binding
+     * @return the endpoint URI for this binding, or {@code null} if a
+     *         structurally incomplete binding entry omitted it
      */
-    public String getUri() { return uri; }
+    public @Nullable String getUri() { return uri; }
 
     /**
      * Sets the endpoint URI for this binding.
      *
      * @param uri the endpoint URI for this binding
      */
-    public void setUri(String uri) { this.uri = uri; }
+    public void setUri(@Nullable String uri) { this.uri = uri; }
 
     /**
      * Gets this binding's circuit breaker override.
      *
      * @return this binding's circuit breaker override, or {@code null} to inherit the route default
      */
-    public GuanacoCircuitBreakerConfig getCircuitBreaker() { return circuitBreaker; }
+    public @Nullable GuanacoCircuitBreakerConfig getCircuitBreaker() { return circuitBreaker; }
 
     /**
      * Sets this binding's circuit breaker override.
      *
      * @param circuitBreaker this binding's circuit breaker override, or {@code null} to inherit the route default
      */
-    public void setCircuitBreaker(GuanacoCircuitBreakerConfig circuitBreaker) { this.circuitBreaker = circuitBreaker; }
+    public void setCircuitBreaker(@Nullable GuanacoCircuitBreakerConfig circuitBreaker) { this.circuitBreaker = circuitBreaker; }
 
     /**
      * Gets this binding's throttler override.
      *
      * @return this binding's throttler override, or {@code null} to inherit the route default
      */
-    public GuanacoThrottlerConfig getThrottler() { return throttler; }
+    public @Nullable GuanacoThrottlerConfig getThrottler() { return throttler; }
 
     /**
      * Sets this binding's throttler override.
      *
      * @param throttler this binding's throttler override, or {@code null} to inherit the route default
      */
-    public void setThrottler(GuanacoThrottlerConfig throttler) { this.throttler = throttler; }
+    public void setThrottler(@Nullable GuanacoThrottlerConfig throttler) { this.throttler = throttler; }
 
     /**
      * Gets this binding's delayer override.
      *
      * @return this binding's delayer override, or {@code null} to inherit the route default
      */
-    public GuanacoDelayerConfig getDelayer() { return delayer; }
+    public @Nullable GuanacoDelayerConfig getDelayer() { return delayer; }
 
     /**
      * Sets this binding's delayer override.
      *
      * @param delayer this binding's delayer override, or {@code null} to inherit the route default
      */
-    public void setDelayer(GuanacoDelayerConfig delayer) { this.delayer = delayer; }
+    public void setDelayer(@Nullable GuanacoDelayerConfig delayer) { this.delayer = delayer; }
 
     /**
      * Gets this binding's egress sample policy.
      *
      * @return this binding's egress sample policy, or {@code null} if not used
      */
-    public GuanacoSampleConfig getSample() { return sample; }
+    public @Nullable GuanacoSampleConfig getSample() { return sample; }
 
     /**
      * Sets this binding's egress sample policy.
      *
      * @param sample this binding's egress sample policy
      */
-    public void setSample(GuanacoSampleConfig sample) { this.sample = sample; }
+    public void setSample(@Nullable GuanacoSampleConfig sample) { this.sample = sample; }
 }

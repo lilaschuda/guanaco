@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.config;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Throttling policy — declarable at route level (default for every binding
  * on that route) or per-binding (overrides the route default for that one
@@ -16,11 +18,11 @@ package io.github.lilaschuda.guanaco.config;
  */
 public class GuanacoThrottlerConfig {
 
-    private Boolean enabled;
-    private Integer requestsPerPeriod;
-    private Long timePeriodMillis;
-    private Boolean asyncDelayed;
-    private Boolean rejectExecution;
+    private @Nullable Boolean enabled;
+    private @Nullable Integer requestsPerPeriod;
+    private @Nullable Long timePeriodMillis;
+    private @Nullable Boolean asyncDelayed;
+    private @Nullable Boolean rejectExecution;
 
     /** Default constructor, used by Jackson when deserializing a throttler block. */
     public GuanacoThrottlerConfig() { }
@@ -30,14 +32,14 @@ public class GuanacoThrottlerConfig {
      *
      * @return the explicitly configured enabled state, or {@code null} if not set
      */
-    public Boolean getEnabled() { return enabled; }
+    public @Nullable Boolean getEnabled() { return enabled; }
 
     /**
      * Sets whether this throttling policy is active.
      *
      * @param enabled whether this throttling policy is active
      */
-    public void setEnabled(Boolean enabled) { this.enabled = enabled; }
+    public void setEnabled(@Nullable Boolean enabled) { this.enabled = enabled; }
 
     /**
      * Resolves the effective enabled state.
@@ -52,44 +54,44 @@ public class GuanacoThrottlerConfig {
     /**
      * Gets the configured maximum number of requests allowed per period.
      *
-     * @return the configured maximum number of requests per period
+     * @return the configured maximum number of requests per period, or {@code null} if not set
      */
-    public Integer getRequestsPerPeriod() { return requestsPerPeriod; }
+    public @Nullable Integer getRequestsPerPeriod() { return requestsPerPeriod; }
 
     /**
      * Sets the maximum number of requests allowed per period.
      *
      * @param requestsPerPeriod the maximum number of requests allowed per period
      */
-    public void setRequestsPerPeriod(Integer requestsPerPeriod) { this.requestsPerPeriod = requestsPerPeriod; }
+    public void setRequestsPerPeriod(@Nullable Integer requestsPerPeriod) { this.requestsPerPeriod = requestsPerPeriod; }
 
     /**
      * Gets the throttling period length in milliseconds.
      *
-     * @return the configured throttling period length in milliseconds
+     * @return the configured throttling period length in milliseconds, or {@code null} if not set
      */
-    public Long getTimePeriodMillis() { return timePeriodMillis; }
+    public @Nullable Long getTimePeriodMillis() { return timePeriodMillis; }
 
     /**
      * Sets the throttling period length in milliseconds.
      *
      * @param timePeriodMillis the throttling period length in milliseconds
      */
-    public void setTimePeriodMillis(Long timePeriodMillis) { this.timePeriodMillis = timePeriodMillis; }
+    public void setTimePeriodMillis(@Nullable Long timePeriodMillis) { this.timePeriodMillis = timePeriodMillis; }
 
     /**
      * Gets the explicitly configured async-delayed state.
      *
      * @return the explicitly configured async-delayed state, or {@code null} if not set
      */
-    public Boolean getAsyncDelayed() { return asyncDelayed; }
+    public @Nullable Boolean getAsyncDelayed() { return asyncDelayed; }
 
     /**
      * Sets whether over-limit calls wait asynchronously rather than blocking.
      *
      * @param asyncDelayed whether over-limit calls wait asynchronously rather than blocking
      */
-    public void setAsyncDelayed(Boolean asyncDelayed) { this.asyncDelayed = asyncDelayed; }
+    public void setAsyncDelayed(@Nullable Boolean asyncDelayed) { this.asyncDelayed = asyncDelayed; }
 
     /**
      * Resolves the effective async-delayed state.
@@ -106,14 +108,14 @@ public class GuanacoThrottlerConfig {
      *
      * @return the explicitly configured reject-execution state, or {@code null} if not set
      */
-    public Boolean getRejectExecution() { return rejectExecution; }
+    public @Nullable Boolean getRejectExecution() { return rejectExecution; }
 
     /**
      * Sets whether over-limit calls are rejected immediately rather than queued.
      *
      * @param rejectExecution whether over-limit calls are rejected immediately rather than queued
      */
-    public void setRejectExecution(Boolean rejectExecution) { this.rejectExecution = rejectExecution; }
+    public void setRejectExecution(@Nullable Boolean rejectExecution) { this.rejectExecution = rejectExecution; }
 
     /**
      * Resolves the effective reject-execution state.

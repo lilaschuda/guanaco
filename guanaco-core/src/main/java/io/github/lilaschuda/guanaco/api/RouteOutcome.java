@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.api;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Root contract for all routing decisions in camel-guanaco.
  *
@@ -29,5 +31,5 @@ public interface RouteOutcome<T> {
      *
      * @return the payload instance, or {@code null} if no payload is attached
      */
-    T body();
+    @Nullable T body();
 }

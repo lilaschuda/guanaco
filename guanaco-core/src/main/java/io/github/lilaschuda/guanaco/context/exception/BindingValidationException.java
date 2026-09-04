@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.context.exception;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Thrown when a route's declared outcomes don't match its {@code bindings:}
  * entries in routes.yaml/json — e.g. an outcome with no corresponding binding,
@@ -22,5 +24,5 @@ public class BindingValidationException extends RuntimeException {
      * @param message description of the specific binding mismatch
      * @param cause the underlying cause, if any
      */
-    public BindingValidationException(String message, Throwable cause) { super(message, cause); }
+    public BindingValidationException(String message, @Nullable Throwable cause) { super(message, cause); }
 }

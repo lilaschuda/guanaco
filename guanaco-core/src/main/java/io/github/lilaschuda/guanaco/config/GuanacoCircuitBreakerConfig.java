@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.config;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Map;
 
 /**
@@ -20,13 +22,13 @@ import java.util.Map;
  */
 public class GuanacoCircuitBreakerConfig {
 
-    private Boolean enabled;
-    private Integer timeoutDurationMs;
-    private Integer slidingWindowSize;
-    private Integer minimumNumberOfCalls;
-    private Integer failureRateThreshold;
-    private Long waitDurationInOpenStateMs;
-    private Map<String, Object> extra;
+    private @Nullable Boolean enabled;
+    private @Nullable Integer timeoutDurationMs;
+    private @Nullable Integer slidingWindowSize;
+    private @Nullable Integer minimumNumberOfCalls;
+    private @Nullable Integer failureRateThreshold;
+    private @Nullable Long waitDurationInOpenStateMs;
+    private @Nullable Map<String, Object> extra;
 
     /** Default constructor, used by Jackson when deserializing a circuit breaker block. */
     public GuanacoCircuitBreakerConfig() { }
@@ -36,14 +38,14 @@ public class GuanacoCircuitBreakerConfig {
      *
      * @return the explicitly configured enabled state, or {@code null} if not set
      */
-    public Boolean getEnabled() { return enabled; }
+    public @Nullable Boolean getEnabled() { return enabled; }
 
     /**
      * Sets the active state for this circuit breaker policy.
      *
      * @param enabled whether this circuit breaker policy is active
      */
-    public void setEnabled(Boolean enabled) { this.enabled = enabled; }
+    public void setEnabled(@Nullable Boolean enabled) { this.enabled = enabled; }
 
     /**
      * Resolves the effective enabled state.
@@ -58,23 +60,23 @@ public class GuanacoCircuitBreakerConfig {
     /**
      * Gets the Resilience4j call timeout in milliseconds.
      *
-     * @return the configured Resilience4j call timeout in milliseconds
+     * @return the configured Resilience4j call timeout in milliseconds, or {@code null} if not set
      */
-    public Integer getTimeoutDurationMs() { return timeoutDurationMs; }
+    public @Nullable Integer getTimeoutDurationMs() { return timeoutDurationMs; }
 
     /**
      * Sets the Resilience4j call timeout in milliseconds.
      *
      * @param timeoutDurationMs the Resilience4j call timeout in milliseconds
      */
-    public void setTimeoutDurationMs(Integer timeoutDurationMs) { this.timeoutDurationMs = timeoutDurationMs; }
+    public void setTimeoutDurationMs(@Nullable Integer timeoutDurationMs) { this.timeoutDurationMs = timeoutDurationMs; }
 
     /**
      * Gets the Resilience4j sliding window size.
      *
-     * @return the configured Resilience4j sliding window size
+     * @return the configured Resilience4j sliding window size, or {@code null} if not set
      */
-    public Integer getSlidingWindowSize() { return slidingWindowSize; }
+    public @Nullable Integer getSlidingWindowSize() { return slidingWindowSize; }
 
     /**
      * Gets optional extra key-value properties to configure advanced Resilience4j options.
@@ -100,66 +102,67 @@ public class GuanacoCircuitBreakerConfig {
      *
      * @return a map of additional property names and their values, or {@code null} if unconfigured
      */
-    public Map<String, Object> getExtra() { return extra; }
-    
-    
+    public @Nullable Map<String, Object> getExtra() { return extra; }
+
+
     /**
      * Sets optional extra key-value properties to configure advanced Resilience4j options.
-     * 
+     *
      * @param extra a map of additional Resilience4j properties; see {@link #getExtra()}
      *              for configuration structure and YAML examples
      * @see #getExtra()
      */
-    public void setExtra(Map<String, Object> extra){
+    public void setExtra(@Nullable Map<String, Object> extra){
         this.extra = extra;
     }
-    
+
     /**
      * Sets the Resilience4j sliding window size.
      *
      * @param slidingWindowSize the Resilience4j sliding window size
      */
-    public void setSlidingWindowSize(Integer slidingWindowSize) { this.slidingWindowSize = slidingWindowSize; }
+    public void setSlidingWindowSize(@Nullable Integer slidingWindowSize) { this.slidingWindowSize = slidingWindowSize; }
 
     /**
      * Gets the minimum number of calls required before failure rate calculation.
      *
-     * @return the configured minimum number of calls before failure rate is calculated
+     * @return the configured minimum number of calls before failure rate is calculated, or {@code null} if not set
      */
-    public Integer getMinimumNumberOfCalls() { return minimumNumberOfCalls; }
+    public @Nullable Integer getMinimumNumberOfCalls() { return minimumNumberOfCalls; }
 
     /**
      * Sets the minimum number of calls required before failure rate calculation.
      *
      * @param minimumNumberOfCalls the minimum number of calls before failure rate is calculated
      */
-    public void setMinimumNumberOfCalls(Integer minimumNumberOfCalls) { this.minimumNumberOfCalls = minimumNumberOfCalls; }
+    public void setMinimumNumberOfCalls(@Nullable Integer minimumNumberOfCalls) { this.minimumNumberOfCalls = minimumNumberOfCalls; }
 
     /**
      * Gets the failure rate threshold percentage that opens the circuit.
      *
-     * @return the configured failure rate threshold percentage that opens the circuit
+     * @return the configured failure rate threshold percentage that opens the circuit, or {@code null} if not set
      */
-    public Integer getFailureRateThreshold() { return failureRateThreshold; }
+    public @Nullable Integer getFailureRateThreshold() { return failureRateThreshold; }
 
     /**
      * Sets the failure rate threshold percentage that opens the circuit.
      *
      * @param failureRateThreshold the failure rate threshold percentage that opens the circuit
      */
-    public void setFailureRateThreshold(Integer failureRateThreshold) { this.failureRateThreshold = failureRateThreshold; }
+    public void setFailureRateThreshold(@Nullable Integer failureRateThreshold) { this.failureRateThreshold = failureRateThreshold; }
 
     /**
      * Gets the wait duration in the open state before moving to half-open.
      *
-     * @return the configured wait duration in the open state, in milliseconds, before moving to half-open
+     * @return the configured wait duration in the open state, in milliseconds, before moving to half-open,
+     *         or {@code null} if not set
      */
-    public Long getWaitDurationInOpenStateMs() { return waitDurationInOpenStateMs; }
+    public @Nullable Long getWaitDurationInOpenStateMs() { return waitDurationInOpenStateMs; }
 
     /**
      * Sets the wait duration in the open state before moving to half-open.
      *
      * @param waitDurationInOpenStateMs the wait duration in the open state, in milliseconds, before moving to half-open
      */
-    public void setWaitDurationInOpenStateMs(Long waitDurationInOpenStateMs) { this.waitDurationInOpenStateMs = waitDurationInOpenStateMs; }
+    public void setWaitDurationInOpenStateMs(@Nullable Long waitDurationInOpenStateMs) { this.waitDurationInOpenStateMs = waitDurationInOpenStateMs; }
 }

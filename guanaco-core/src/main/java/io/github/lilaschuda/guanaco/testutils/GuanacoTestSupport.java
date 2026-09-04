@@ -13,6 +13,7 @@ import io.github.lilaschuda.guanaco.config.RouteConfig;
 import io.github.lilaschuda.guanaco.context.GuanacoContext;
 import io.github.lilaschuda.guanaco.api.GuanacoDelayStrategy;
 import org.apache.camel.AggregationStrategy;
+import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.List;
@@ -30,17 +31,17 @@ public final class GuanacoTestSupport {
     private final Map<String, RouteConfig> virtualRoutes = new HashMap<>();
     private ValidationMode validationMode = ValidationMode.STRICT;
 
-    private GuanacoThrottlerConfig routeThrottler;
-    private GuanacoCircuitBreakerConfig routeCircuitBreaker;
-    private GuanacoDelayerConfig routeDelayer;
-    private GuanacoAggregateConfig routeAggregate;
-    private GuanacoIdempotentConfig routeIdempotent;
-    private GuanacoResequenceConfig routeResequence;
+    private @Nullable GuanacoThrottlerConfig routeThrottler;
+    private @Nullable GuanacoCircuitBreakerConfig routeCircuitBreaker;
+    private @Nullable GuanacoDelayerConfig routeDelayer;
+    private @Nullable GuanacoAggregateConfig routeAggregate;
+    private @Nullable GuanacoIdempotentConfig routeIdempotent;
+    private @Nullable GuanacoResequenceConfig routeResequence;
 
     private final Map<String, GuanacoDelayStrategy> delayStrategies = new HashMap<>();
     private final Map<String, AggregationStrategy> aggregationStrategies = new HashMap<>();
 
-    private GuanacoContext context;
+    private @Nullable GuanacoContext context;
 
     /**
      * Constructs a test support builder for the specified package path.
@@ -54,21 +55,22 @@ public final class GuanacoTestSupport {
     /**
      * Configures the validation mode for the test environment.
      *
-     * @param mode the validation mode to apply (e.g., {@code STRICT} or {@code PERMISSIVE})
+     * @param mode the validation mode to apply (e.g., {@code STRICT} or {@code PERMISSIVE}),
+     *             or {@code null} to reset to the default ({@code STRICT})
      * @return this GuanacoTestSupport builder instance
      */
-    public GuanacoTestSupport withValidation(ValidationMode mode) {
-        this.validationMode = mode;
+    public GuanacoTestSupport withValidation(@Nullable ValidationMode mode) {
+        this.validationMode = mode != null ? mode : ValidationMode.STRICT;
         return this;
     }
 
     /**
      * Sets the route-level throttler default applied to the next {@code .route(...)} call and then cleared.
      *
-     * @param throttler the throttler configuration to apply
+     * @param throttler the throttler configuration to apply, or {@code null} to clear a previously-set one
      * @return this GuanacoTestSupport builder instance
      */
-    public GuanacoTestSupport withRouteThrottler(GuanacoThrottlerConfig throttler) {
+    public GuanacoTestSupport withRouteThrottler(@Nullable GuanacoThrottlerConfig throttler) {
         this.routeThrottler = throttler;
         return this;
     }
@@ -76,10 +78,10 @@ public final class GuanacoTestSupport {
     /**
      * Sets the route-level circuit breaker default applied to the next {@code .route(...)} call and then cleared.
      *
-     * @param cb the circuit breaker configuration to apply
+     * @param cb the circuit breaker configuration to apply, or {@code null} to clear a previously-set one
      * @return this GuanacoTestSupport builder instance
      */
-    public GuanacoTestSupport withRouteCircuitBreaker(GuanacoCircuitBreakerConfig cb) {
+    public GuanacoTestSupport withRouteCircuitBreaker(@Nullable GuanacoCircuitBreakerConfig cb) {
         this.routeCircuitBreaker = cb;
         return this;
     }
@@ -87,10 +89,10 @@ public final class GuanacoTestSupport {
     /**
      * Sets the route-level delayer default applied to the next {@code .route(...)} call and then cleared.
      *
-     * @param delayer the delayer configuration to apply
+     * @param delayer the delayer configuration to apply, or {@code null} to clear a previously-set one
      * @return this GuanacoTestSupport builder instance
      */
-    public GuanacoTestSupport withRouteDelayer(GuanacoDelayerConfig delayer) {
+    public GuanacoTestSupport withRouteDelayer(@Nullable GuanacoDelayerConfig delayer) {
         this.routeDelayer = delayer;
         return this;
     }
@@ -98,10 +100,10 @@ public final class GuanacoTestSupport {
     /**
      * Sets the aggregate config applied to the next {@code .route(...)} call and then cleared.
      *
-     * @param aggregate the aggregate configuration to apply
+     * @param aggregate the aggregate configuration to apply, or {@code null} to clear a previously-set one
      * @return this GuanacoTestSupport builder instance
      */
-    public GuanacoTestSupport withRouteAggregate(GuanacoAggregateConfig aggregate) {
+    public GuanacoTestSupport withRouteAggregate(@Nullable GuanacoAggregateConfig aggregate) {
         this.routeAggregate = aggregate;
         return this;
     }
@@ -109,10 +111,10 @@ public final class GuanacoTestSupport {
     /**
      * Sets the idempotent config applied to the next {@code .route(...)} call and then cleared.
      *
-     * @param idempotent the idempotent configuration to apply
+     * @param idempotent the idempotent configuration to apply, or {@code null} to clear a previously-set one
      * @return this GuanacoTestSupport builder instance
      */
-    public GuanacoTestSupport withRouteIdempotent(GuanacoIdempotentConfig idempotent) {
+    public GuanacoTestSupport withRouteIdempotent(@Nullable GuanacoIdempotentConfig idempotent) {
         this.routeIdempotent = idempotent;
         return this;
     }
@@ -120,10 +122,10 @@ public final class GuanacoTestSupport {
     /**
      * Sets the resequence config applied to the next {@code .route(...)} call and then cleared.
      *
-     * @param resequence the resequence configuration to apply
+     * @param resequence the resequence configuration to apply, or {@code null} to clear a previously-set one
      * @return this GuanacoTestSupport builder instance
      */
-    public GuanacoTestSupport withRouteResequence(GuanacoResequenceConfig resequence) {
+    public GuanacoTestSupport withRouteResequence(@Nullable GuanacoResequenceConfig resequence) {
         this.routeResequence = resequence;
         return this;
     }

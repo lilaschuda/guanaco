@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.config;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Optional resequencing configuration for a route, declared as a nested
  * {@code resequence:} block — modeled identically to {@code aggregate} and
@@ -46,11 +48,11 @@ public class GuanacoResequenceConfig {
     /** Default STREAM-mode {@code rejectOld} setting, used when {@code rejectOld} is not set. */
     public static final boolean DEFAULT_REJECT_OLD = true;
 
-    private String sequenceHeader;
-    private Mode mode;
-    private Integer capacity;
-    private Long timeoutMs;
-    private Boolean rejectOld;
+    private @Nullable String sequenceHeader;
+    private @Nullable Mode mode;
+    private @Nullable Integer capacity;
+    private @Nullable Long timeoutMs;
+    private @Nullable Boolean rejectOld;
 
     /** Default constructor, used by Jackson when deserializing a resequence block. */
     public GuanacoResequenceConfig() { }
@@ -58,72 +60,72 @@ public class GuanacoResequenceConfig {
     /**
      * Gets the header used to determine message sequence order.
      *
-     * @return the header used to determine message sequence order
+     * @return the header used to determine message sequence order, or {@code null} if not set
      */
-    public String getSequenceHeader() { return sequenceHeader; }
+    public @Nullable String getSequenceHeader() { return sequenceHeader; }
 
     /**
      * Sets the header used to determine message sequence order.
      *
      * @param sequenceHeader the header used to determine message sequence order
      */
-    public void setSequenceHeader(String sequenceHeader) { this.sequenceHeader = sequenceHeader; }
+    public void setSequenceHeader(@Nullable String sequenceHeader) { this.sequenceHeader = sequenceHeader; }
 
     /**
      * Gets the resequencing mode.
      *
-     * @return the resequencing mode
+     * @return the resequencing mode, or {@code null} if not set
      */
-    public Mode getMode() { return mode; }
+    public @Nullable Mode getMode() { return mode; }
 
     /**
      * Sets the resequencing mode.
      *
      * @param mode the resequencing mode
      */
-    public void setMode(Mode mode) { this.mode = mode; }
+    public void setMode(@Nullable Mode mode) { this.mode = mode; }
 
     /**
      * Gets the resequencer's buffer capacity.
      *
      * @return the explicitly configured capacity, or {@code null} if not set
      */
-    public Integer getCapacity() { return capacity; }
+    public @Nullable Integer getCapacity() { return capacity; }
 
     /**
      * Sets the resequencer's buffer capacity.
      *
      * @param capacity the resequencer's buffer capacity
      */
-    public void setCapacity(Integer capacity) { this.capacity = capacity; }
+    public void setCapacity(@Nullable Integer capacity) { this.capacity = capacity; }
 
     /**
      * Gets the resequencer's timeout in milliseconds.
      *
      * @return the explicitly configured timeout in milliseconds, or {@code null} if not set
      */
-    public Long getTimeoutMs() { return timeoutMs; }
+    public @Nullable Long getTimeoutMs() { return timeoutMs; }
 
     /**
      * Sets the resequencer's timeout in milliseconds.
      *
      * @param timeoutMs the resequencer's timeout in milliseconds
      */
-    public void setTimeoutMs(Long timeoutMs) { this.timeoutMs = timeoutMs; }
+    public void setTimeoutMs(@Nullable Long timeoutMs) { this.timeoutMs = timeoutMs; }
 
     /**
      * Gets whether out-of-sequence-and-too-old messages are rejected.
      *
      * @return the explicitly configured reject-old state, or {@code null} if not set; STREAM mode only
      */
-    public Boolean getRejectOld() { return rejectOld; }
+    public @Nullable Boolean getRejectOld() { return rejectOld; }
 
     /**
      * Sets whether out-of-sequence-and-too-old messages are rejected.
      *
      * @param rejectOld whether out-of-sequence-and-too-old messages are rejected; STREAM mode only
      */
-    public void setRejectOld(Boolean rejectOld) { this.rejectOld = rejectOld; }
+    public void setRejectOld(@Nullable Boolean rejectOld) { this.rejectOld = rejectOld; }
 
     /**
      * STREAM mode only — BATCH mode always uses whatever capacity/timeoutMs is explicitly set.

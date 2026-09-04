@@ -3,16 +3,17 @@ package io.github.lilaschuda.guanaco.testutils;
 import io.github.lilaschuda.guanaco.context.GuanacoContext;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.component.mock.MockEndpoint;
+import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Execution wrapper providing simplified template delivery and mock access 
+ * Execution wrapper providing simplified template delivery and mock access
  * for Guanaco test suites.
  */
 public final class GuanacoRuntimeEnvironment {
-    
+
     private GuanacoContext context;
     private final ProducerTemplate producer;
 
@@ -40,21 +41,21 @@ public final class GuanacoRuntimeEnvironment {
      * Sends a basic message body to the target endpoint.
      *
      * @param endpointUri the destination endpoint URI
-     * @param body the payload body to send
+     * @param body the payload body to send, or {@code null} to send a message with no body
      */
-    public void send(String endpointUri, Object body) {
+    public void send(String endpointUri, @Nullable Object body) {
         producer.sendBody(endpointUri, body);
     }
 
-    /** 
+    /**
      * Sends a message body accompanied by a map of routing headers.
      * Uses wildcard tracking to prevent invariant generic compilation errors.
      *
      * @param endpointUri the destination endpoint URI
-     * @param body the payload body to send
+     * @param body the payload body to send, or {@code null} to send a message with no body
      * @param headers the message headers to attach
      */
-    public void send(String endpointUri, Object body, Map<String, ?> headers) {
+    public void send(String endpointUri, @Nullable Object body, Map<String, ?> headers) {
         // Camel's underlying engine expects Map<String, Object>
         Map<String, Object> camelHeaders = new HashMap<>(headers);
         producer.sendBodyAndHeaders(endpointUri, body, camelHeaders);
@@ -68,7 +69,7 @@ public final class GuanacoRuntimeEnvironment {
     public void setApplicationContext(GuanacoContext context){
         this.context = context;
     }
-    
+
     /**
      * Retrieves the application context.
      *

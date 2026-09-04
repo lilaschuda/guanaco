@@ -1,5 +1,7 @@
 package io.github.lilaschuda.guanaco.api;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Sends a copy of the message to a side-channel destination, in addition to
  * routing {@code primary} exactly as if it had been returned directly.
@@ -24,7 +26,9 @@ package io.github.lilaschuda.guanaco.api;
  * conditional telemetry this produces on failure.
  *
  * <p>{@code body()} delegates to {@code primary} — the tap is a side
- * effect, not part of the outcome's own payload contract.
+ * effect, not part of the outcome's own payload contract, and inherits
+ * whatever nullability {@code primary}'s own body() has (e.g. if
+ * {@code primary} is a {@link Drop}, this is null too).
  *
  * <p>Usage:
  *   {@code return new WireTap<>(new ToInventory(order), new ToAuditLog(order));}
@@ -54,7 +58,7 @@ public final class WireTap<T> implements RouteOutcome<T> {
     }
 
     @Override
-    public T body() {
+    public @Nullable T body() {
         return primary.body();
     }
 

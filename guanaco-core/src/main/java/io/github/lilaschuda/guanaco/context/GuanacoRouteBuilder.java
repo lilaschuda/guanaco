@@ -1,5 +1,6 @@
 package io.github.lilaschuda.guanaco.context;
 
+import io.github.lilaschuda.guanaco.api.AsyncOutcomeProcessor;
 import io.github.lilaschuda.guanaco.context.exception.GuanacoRouteBuilderException;
 import io.github.lilaschuda.guanaco.api.GuanacoDelayStrategy;
 import io.github.lilaschuda.guanaco.api.RouteOutcome;
@@ -17,6 +18,7 @@ import io.github.lilaschuda.guanaco.config.RouteConfig;
 import io.github.lilaschuda.guanaco.api.Processor;
 import io.github.lilaschuda.guanaco.api.Drop;
 import io.github.lilaschuda.guanaco.api.Multicast;
+import io.github.lilaschuda.guanaco.api.OutcomeCallback;
 import io.github.lilaschuda.guanaco.api.Split;
 import io.github.lilaschuda.guanaco.api.WireTap;
 import io.github.lilaschuda.guanaco.api.SagaStep;
@@ -42,8 +44,10 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.apache.camel.AsyncCallback;
 import org.apache.camel.model.DelayDefinition;
 import org.apache.camel.model.ThrottleDefinition;
+import org.apache.camel.support.AsyncProcessorSupport;
 import org.apache.camel.support.processor.idempotent.MemoryIdempotentRepository;
 
 /**
@@ -91,7 +95,12 @@ class GuanacoRouteBuilder extends RouteBuilder {
      */
     private static final String SAGA_OPTION_PROPERTY_PREFIX = "guanaco.saga.option.";
     
-    private final Processor<? extends RouteOutcome<?>> processor;
+    // Exactly one of these two is ever non-null -- set once, at construction,
+    // by whichever of the two constructors below was used. Everything in
+    // this class reads whichever one is populated; there is no code path
+    // where both, or neither, are set.
+    private final Processor<? extends RouteOutcome<?>> syncProcessor;
+    private final AsyncOutcomeProcessor<? extends RouteOutcome<?>> asyncProcessor;
     private final Class<? extends RouteOutcome<?>> routeInterface;
     private final RouteConfig config;
     private final String processorName;
@@ -100,7 +109,7 @@ class GuanacoRouteBuilder extends RouteBuilder {
     private ProducerTemplate producerTemplate;
 
     /**
-     * Constructs a route builder for the given processor and route configuration.
+     * Constructs a route builder for a synchronous {@link Processor}.
      *
      * @param processorInstance the processor instance executing business logic
      * @param routeInterface the route interface implemented by the processor
@@ -114,7 +123,31 @@ class GuanacoRouteBuilder extends RouteBuilder {
             RouteConfig config,
             String processorName,
             GuanacoRuntimeContext runtimeContext) {
-        this.processor = processorInstance;
+        this.syncProcessor = processorInstance;
+        this.asyncProcessor = null;
+        this.routeInterface = routeInterface;
+        this.config = config;
+        this.processorName = processorName;
+        this.runtimeContext = runtimeContext;
+    }
+
+    /**
+     * Constructs a route builder for an {@link AsyncOutcomeProcessor}.
+     *
+     * @param processorInstance the processor instance executing business logic asynchronously
+     * @param routeInterface the route interface implemented by the processor
+     * @param config the route configuration options
+     * @param processorName the name identifying this processor
+     * @param runtimeContext the global boot-time runtime context
+     */
+    public GuanacoRouteBuilder(
+            AsyncOutcomeProcessor<? extends RouteOutcome<?>> processorInstance,
+            Class<? extends RouteOutcome<?>> routeInterface,
+            RouteConfig config,
+            String processorName,
+            GuanacoRuntimeContext runtimeContext) {
+        this.syncProcessor = null;
+        this.asyncProcessor = processorInstance;
         this.routeInterface = routeInterface;
         this.config = config;
         this.processorName = processorName;
@@ -200,7 +233,9 @@ class GuanacoRouteBuilder extends RouteBuilder {
             pipeline = wireAggregate(pipeline, config.getAggregate());
         }
 
-        ProcessorDefinition<?> afterProcess = pipeline.process(this::dispatchOutcome);
+        ProcessorDefinition<?> afterProcess = asyncProcessor != null
+                ? pipeline.process(new AsyncDispatchStep())
+                : pipeline.process(this::dispatchOutcome);
 
         // If dispatchOutcome found a WireTap wrapper, it stashed the tap's
         // resolved target URI in TAP_TARGET_PROPERTY and unwrapped
@@ -493,7 +528,20 @@ class GuanacoRouteBuilder extends RouteBuilder {
     }
 
     private void dispatchOutcome(Exchange exchange) throws Exception {
-        RouteOutcome<?> outcome = processor.process(exchange);
+        @SuppressWarnings("unchecked")
+        Processor<RouteOutcome<?>> typedSyncProcessor = (Processor<RouteOutcome<?>>) syncProcessor;
+        RouteOutcome<?> outcome = typedSyncProcessor.process(exchange);
+        finishDispatch(exchange, outcome);
+    }
+
+    /**
+     * Everything dispatchOutcome (the sync path) and AsyncDispatchStep (the
+     * async path) both need to do once an outcome is in hand -- extracted so
+     * the SagaStep/WireTap unwrapping, OUTCOME_PROPERTY bookkeeping, and
+     * Drop/Split/Multicast handling exist in exactly one place rather than
+     * being maintained twice across the two dispatch mechanisms.
+     */
+    private void finishDispatch(Exchange exchange, RouteOutcome<?> outcome) {
         if (outcome == null) {
             throw new GuanacoRouteBuilderException(
                     "[" + processorName + "] process() returned null. " +
@@ -524,6 +572,56 @@ class GuanacoRouteBuilder extends RouteBuilder {
         }
 
         exchange.getIn().setBody(outcome.body());
+    }
+
+    /**
+     * The genuine {@link org.apache.camel.AsyncProcessor} wired into the
+     * pipeline for the async path instead of {@link #dispatchOutcome}.
+     * Extends {@code AsyncProcessorSupport} so the synchronous
+     * {@code Processor#process(Exchange)} bridge Camel's own machinery may
+     * still call comes for free -- only the two-arg async method is written
+     * here.
+     *
+     * <p>{@code AsyncOutcomeProcessor} implementations are contractually
+     * required to call exactly one {@link OutcomeCallback} method exactly
+     * once (see its own javadoc), but a misbehaving implementation that
+     * throws synchronously instead is caught defensively below -- without
+     * that, {@code callback.done(...)} would never fire and this exchange
+     * would hang permanently rather than surfacing as a route failure.
+     */
+    private class AsyncDispatchStep extends AsyncProcessorSupport {
+        @Override
+        public boolean process(Exchange exchange, AsyncCallback callback) {
+            @SuppressWarnings("unchecked")
+            AsyncOutcomeProcessor<RouteOutcome<?>> typedAsyncProcessor =
+                    (AsyncOutcomeProcessor<RouteOutcome<?>>) asyncProcessor;
+
+            try {
+                typedAsyncProcessor.process(exchange, new OutcomeCallback<RouteOutcome<?>>() {
+                    @Override
+                    public void onOutcome(RouteOutcome<?> outcome) {
+                        try {
+                            finishDispatch(exchange, outcome);
+                        } catch (Exception e) {
+                            exchange.setException(e);
+                        }
+                        callback.done(false);
+                    }
+
+                    @Override
+                    public void onFailure(Throwable error) {
+                        exchange.setException(error);
+                        callback.done(false);
+                    }
+                });
+            } catch (Exception e) {
+                exchange.setException(e);
+                callback.done(true);
+                return true;
+            }
+
+            return false; // genuinely async: callback fires later, not on this thread/call
+        }
     }
 
     /**
