@@ -6,7 +6,7 @@ this project follows Semantic Versioning: the public API and behavioral
 guarantees documented in `ROADMAP.md`'s "v1.0 API freeze" section will not
 change without a major version bump.
 
-## [1.2.0] - in progress
+## [1.2.0] - 2026-09-05
 
 ### Added
 - **`guanaco-kotlin` module** (new, optional Maven module — `guanaco-core` never
