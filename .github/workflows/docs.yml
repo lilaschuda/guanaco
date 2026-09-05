@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: 'temurin'
@@ -30,6 +30,9 @@ jobs:
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
+
+      - name: Disable Java problem matcher for expected background-thread exceptions
+        run: echo "::remove-matcher owner=java::"
 
       - name: Generate Javadoc & KDoc
         run: mvn -B clean package javadoc:aggregate

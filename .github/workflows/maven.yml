@@ -24,6 +24,9 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
+      - name: Disable Java problem matcher for expected background-thread exceptions
+        run: echo "::remove-matcher owner=java::"
+
       - name: Verify build and run tests
         run: mvn -B verify --file pom.xml
 
