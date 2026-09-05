@@ -7,20 +7,14 @@
     <parent>
         <groupId>io.github.lilaschuda</groupId>
         <artifactId>guanaco-parent</artifactId>
-        <version>1.2.0-SNAPSHOT</version>
+        <version>1.2.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <!--
-        artifactId intentionally unchanged from the published v1.0.0
-        coordinate (io.github.lilaschuda:guanaco); this module IS the
-        existing published jar, just relocated into a reactor. Consumers'
-        <dependency> blocks do not need to change.
-    -->
     <artifactId>guanaco</artifactId>
     <packaging>jar</packaging>
 
-    <name>guanaco</name>
+    <name>guanaco-core</name>
     <description>An idiomatic Java DSL for Apache Camel, with compiler-checked routes.</description>
 
     <properties>
@@ -130,10 +124,5 @@
             <version>${camel.version}</version>
             <type>jar</type>
         </dependency>
-        <!--
-            NOTE: no Micrometer dependency here; not even optional/provided.
-            guanaco-core carries zero telemetry-vendor dependencies of any
-            kind. See guanaco-telemetry's POM for the Micrometer integration.
-        -->
     </dependencies>
 </project>
