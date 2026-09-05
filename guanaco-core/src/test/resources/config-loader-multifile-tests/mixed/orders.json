@@ -1,0 +1,1 @@
+{"routes": {"OrderProcessor": {"from": "direct:orders"}}}

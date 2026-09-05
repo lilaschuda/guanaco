@@ -5,6 +5,7 @@ import io.github.lilaschuda.guanaco.config.exception.UnsupportedConfigFormatExce
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,7 +17,7 @@ import java.io.InputStream;
  *
  * <p>Supports both YAML and JSON. Format is determined purely by file
  * extension — there is no separate format property to configure or keep in
- * sync with the actual file. Two conventions are supported:
+ * sync with the actual file. Two single-file conventions are supported:
  *
  * <ul>
  *   <li>{@link #load()} — looks for {@code routes.json}, then
@@ -27,7 +28,13 @@ import java.io.InputStream;
  *       with format inferred from its extension.</li>
  * </ul>
  *
- * <p>Both formats are parsed with strict duplicate-key detection enabled —
+ * <p>A third, multi-file convention scans a whole classpath directory
+ * instead of a single named resource -- see {@link #loadFromDirectory()},
+ * {@link #loadFromDirectory(String)}, {@link ConfigDirectoryScanner}, and
+ * {@link ConfigTreeMerger} for the discovery, per-file precedence, and
+ * merge semantics.
+ *
+ * <p>All formats are parsed with strict duplicate-key detection enabled —
  * a configuration file with the same key repeated at the same level fails
  * to load immediately, rather than silently keeping whichever value Jackson
  * happens to parse last.
@@ -36,6 +43,15 @@ public class ConfigLoader {
 
     private static final Logger log = LoggerFactory.getLogger(ConfigLoader.class);
     private static final String DEFAULT_BASE_NAME = "routes";
+
+    /** Default classpath directory scanned by {@link #loadFromDirectory()}, when no override is set. */
+    private static final String DEFAULT_ROUTES_DIR = "routes";
+
+    /** System property overriding the scanned directory for multi-file configuration loading. */
+    public static final String ROUTES_DIR_PROPERTY = "guanaco.routes.dir";
+
+    /** System property opting into permitting a scanned directory to mix JSON and YAML/YML files. */
+    public static final String ALLOW_MIXED_FORMATS_PROPERTY = "guanaco.config.allowMixedFormats";
 
     private final ObjectMapper yamlMapper;
     private final ObjectMapper jsonMapper;
@@ -103,7 +119,23 @@ public class ConfigLoader {
                 "Could not find a configuration file. Looked for classpath:" + jsonPath +
                 ", classpath:" + yamlPath + ", and classpath:" + ymlPath + ".");
     }
-
+    
+    /**
+     * Checks whether a single-file configuration exists at the default
+     * classpath location ({@code routes.json}, {@code routes.yaml}, or
+     * {@code routes.yml}), without loading it -- used by
+     * {@link io.github.lilaschuda.guanaco.context.GuanacoContext} to decide
+     * whether to use {@link #load()} or fall back to
+     * {@link #loadFromDirectory()}.
+     *
+     * @return {@code true} if any of the three default single-file conventions exists
+     */
+    public boolean singleFileConfigExists() {
+        return classpathResourceExists(DEFAULT_BASE_NAME + ".json")
+                || classpathResourceExists(DEFAULT_BASE_NAME + ".yaml")
+                || classpathResourceExists(DEFAULT_BASE_NAME + ".yml");
+    }
+    
     /**
      * Load from a specific classpath resource path. Format is inferred from
      * the resource's file extension.
@@ -130,6 +162,73 @@ public class ConfigLoader {
         } catch (Exception e) {
             throw new GuanacoConfigException(
                     "Failed to parse routes config at classpath:" + classpathResource + ": " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Loads configuration by scanning a classpath directory of multiple
+     * files and merging them into one combined configuration -- see
+     * {@link ConfigTreeMerger} for the merge semantics and
+     * {@link ConfigDirectoryScanner} for file discovery.
+     *
+     * <p>The scanned directory defaults to {@value #DEFAULT_ROUTES_DIR},
+     * overridable via the {@value #ROUTES_DIR_PROPERTY} system property --
+     * e.g. to point at a different directory per environment (a local YAML
+     * directory for development, a generated JSON directory for
+     * deployment). {@value #ALLOW_MIXED_FORMATS_PROPERTY} controls whether
+     * that directory may mix JSON and YAML/YML files at all; unset or
+     * {@code false}, the default, means it may not.
+     *
+     * @return the loaded, merged configuration
+     */
+    public GuanacoConfig loadFromDirectory() {
+        String directory = System.getProperty(ROUTES_DIR_PROPERTY, DEFAULT_ROUTES_DIR);
+        return loadFromDirectory(directory, Boolean.getBoolean(ALLOW_MIXED_FORMATS_PROPERTY));
+    }
+
+    /**
+     * Loads configuration by scanning a specific classpath directory,
+     * bypassing the {@value #ROUTES_DIR_PROPERTY} system property.
+     * {@value #ALLOW_MIXED_FORMATS_PROPERTY} still applies.
+     *
+     * @param classpathDirectory the classpath directory to scan, e.g. {@code "routes"}
+     * @return the loaded, merged configuration
+     */
+    public GuanacoConfig loadFromDirectory(String classpathDirectory) {
+        return loadFromDirectory(classpathDirectory, Boolean.getBoolean(ALLOW_MIXED_FORMATS_PROPERTY));
+    }
+
+    /**
+     * Package-private so tests can point directory-based resolution at an
+     * isolated classpath subdirectory with an explicit mixed-formats
+     * setting, bypassing both system properties -- the same reasoning
+     * {@link #loadDefault} already applies to the single-file case.
+     *
+     * @param classpathDirectory the classpath directory to scan, e.g. {@code "routes"}
+     * @param allowMixedFormats whether the directory may mix JSON and YAML/YML files
+     * @return the loaded, merged configuration
+     */
+    GuanacoConfig loadFromDirectory(String classpathDirectory, boolean allowMixedFormats) {
+        ConfigDirectoryScanner scanner = new ConfigDirectoryScanner(yamlMapper, jsonMapper);
+        ConfigDirectoryScanner.ScanResult scanResult = scanner.scan(classpathDirectory, allowMixedFormats);
+
+        ObjectNode merged = ConfigTreeMerger.merge(scanResult.trees(), scanResult.names());
+
+        try {
+            // treeToValue is format-agnostic -- the tree's own content
+            // already reflects whichever format(s) each source file was
+            // originally parsed from during the scan, and either mapper
+            // instance binds a tree to a POJO identically regardless of
+            // which JsonFactory it was constructed with.
+            GuanacoConfig config = yamlMapper.treeToValue(merged, GuanacoConfig.class);
+            log.info("Loaded {} route(s) from {} file(s) under classpath*:{}/, validation mode: {}",
+                    config.getRoutes() == null ? 0 : config.getRoutes().size(),
+                    scanResult.trees().size(), classpathDirectory, config.getFramework().getValidation());
+            return config;
+        } catch (Exception e) {
+            throw new GuanacoConfigException(
+                    "Failed to bind merged configuration from classpath*:" + classpathDirectory + "/ to "
+                    + "GuanacoConfig: " + e.getMessage(), e);
         }
     }
 

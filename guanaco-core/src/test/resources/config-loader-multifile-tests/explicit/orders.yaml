@@ -1,0 +1,5 @@
+routes:
+  OrderProcessor:
+    from: direct:orders
+    bindings:
+      ToInventory: mock:inventory

@@ -63,6 +63,44 @@ change without a major version bump.
   case by case rather than applied uniformly (e.g. `Multicast`/`Split`'s
   `body()` is genuinely non-null; `WireTap`/`SagaStep`'s is not, since both
   delegate to a wrapped outcome that may itself be `Drop`).
+- **Multi-file configuration loading** — resolves the `0.11.0`-era open
+  design questions (where `framework:`/`validation:` live when config is
+  split across files, and whether file ordering matters) with one shared
+  mechanism rather than a bespoke rule per concern:
+  - **`ConfigTreeMerger`**: a single recursive rule, applied uniformly at
+    every depth of the parsed configuration tree — object keys merge, any
+    other collision (a scalar, an array, or a type mismatch) on a
+    duplicate key is a hard, boot-time failure naming both files involved.
+    `framework:` field collisions, `routes:` processor-entry collisions,
+    and `bindings:` collisions are all the same rule applied at different
+    tree depths, not three separate special cases. File ordering is
+    provably irrelevant to the result, as a direct consequence of the
+    merge's own symmetry, not a separately-imposed rule.
+  - **`ConfigDirectoryScanner`**: discovers files via Spring's `classpath*:`
+    resolution (`PathMatchingResourcePatternResolver`) rather than a
+    single-root `classpath:` lookup, so a directory contributed by more
+    than one classpath location (e.g. two jars) is merged rather than one
+    location being silently, unpredictably chosen over another with no
+    error at all. The existing single-file JSON-over-YAML precedence
+    applies again, independently, per logical file name within a scanned
+    directory; whether an entire directory may mix JSON and YAML/YML files
+    at all is a separate, coarser policy, forbidden by default (a
+    directory containing both fails to load, with a clear error) and
+    opt-in via `-Dguanaco.config.allowMixedFormats=true`.
+  - **`ConfigLoader.loadFromDirectory()`**: the scanned directory defaults
+    to `routes/`, overridable via `-Dguanaco.routes.dir=...` — e.g. a
+    hand-written YAML directory for local development, a generated JSON
+    directory for deployment.
+  - **`GuanacoContext.loadConfig()`**: tries the existing single-file
+    convention first, completely unchanged for any deployment that already
+    has a `routes.json`/`.yaml`/`.yml` file — only when none of the three
+    exists at all does it fall back to directory-based loading. No
+    separate flag is needed to opt in — a deployment chooses the convention
+    simply by which one it has.
+  - Documented in the README's "Configuration format" section, including
+    why multi-file scanning relies on the same Spring dependency
+    `GuanacoContext` already carries rather than avoiding it in one place
+    while remaining fully dependent on it everywhere else.
 
 ### Fixed
 - **Two latent NPE risks surfaced by the nullability audit**, both from a

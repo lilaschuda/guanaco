@@ -6,6 +6,7 @@ import io.github.lilaschuda.guanaco.api.RouteOutcome;
 import io.github.lilaschuda.guanaco.config.ConfigLoader;
 import io.github.lilaschuda.guanaco.config.GuanacoConfig;
 import io.github.lilaschuda.guanaco.config.RouteConfig;
+import io.github.lilaschuda.guanaco.config.exception.GuanacoConfigException;
 import io.github.lilaschuda.guanaco.api.GuanacoRoute;
 import io.github.lilaschuda.guanaco.api.Processor;
 import io.github.lilaschuda.guanaco.api.telemetry.GuanacoTelemetryListener;
@@ -167,14 +168,36 @@ public class GuanacoContext extends SpringCamelContext {
     }
 
     /**
-     * Supplies the route configurations {@link #wireRoutes()} operates on. Defaults to
-     * loading from routes.yaml/json. Overridable so test support code can inject
-     * route configs built programmatically.
+     * Supplies the route configurations {@link #wireRoutes()} operates on.
+     *
+     * <p>Defaults to the existing single-file convention -- {@code routes.json},
+     * {@code routes.yaml}, or {@code routes.yml} on the classpath, exactly as
+     * before -- completely unchanged for any existing deployment that already
+     * has one of those files. Only when none of the three exists at all does
+     * this fall back to scanning a classpath directory of multiple files
+     * (see {@link ConfigLoader#loadFromDirectory()}); a deployment opts into
+     * that convention simply by having a {@code routes/} directory instead
+     * of a single {@code routes.*} file, with no separate flag required.
+     *
+     * <p>Overridable so test support code can inject route configs built
+     * programmatically.
      *
      * @return the loaded configuration describing every configured route
      */
     protected GuanacoConfig loadConfig() {
-        return configLoader.load();
+        if (configLoader.singleFileConfigExists()) {
+            return configLoader.load();
+        }
+
+        try {
+            return configLoader.loadFromDirectory();
+        } catch (GuanacoConfigException e) {
+            throw new GuanacoConfigException(
+                    "No configuration found. Guanaco looked for a single-file configuration "
+                    + "(classpath:routes.json, classpath:routes.yaml, classpath:routes.yml) and, "
+                    + "finding none, fell back to scanning classpath*:routes/ for multiple files -- "
+                    + "that also found nothing. " + e.getMessage(), e);
+        }
     }
 
     /**
