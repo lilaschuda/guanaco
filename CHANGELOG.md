@@ -114,12 +114,6 @@ change without a major version bump.
   `GuanacoTestSupport.withValidation(null)` — a second, reachable path into
   the same gap — now coalesces the same way.
 
-### Scope
-- Multi-file/modular config loading remains deferred, as noted since
-  `0.11.0` — implementation still hasn't started; its two open design
-  questions (where `framework:`/`validation:` live when config is split
-  across files, and whether file ordering matters) are unchanged.
-
 ## [1.1.0] - 2026-09-02
 
 ### Added
