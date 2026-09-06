@@ -52,6 +52,20 @@
              unlike guanaco-kotlin, no <sourceDirectory> override should be needed here. To be confirmed
              once real code lands in Phase 2. -->
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>default-compile</id>
+                        <phase>none</phase>
+                    </execution>
+                    <execution>
+                        <id>default-testCompile</id>
+                        <phase>none</phase>
+                    </execution>
+                </executions>
+            </plugin>
             <!-- scala:doc is currently unusable for this module: scala-maven-plugin
             4.9.10's doc goal generates Scala-2-vocabulary flags (-doc-format,
             -doc-title) that Scala 3.9.0's scaladoc tool rejects outright -
@@ -67,6 +81,7 @@
                 <version>${scala-maven-plugin.version}</version>
                 <configuration>
                     <scalaVersion>${scala3.version}</scalaVersion>
+                    <compileOrder>Mixed</compileOrder>
                 </configuration>
                 <executions>
                     <execution>

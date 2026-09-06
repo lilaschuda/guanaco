@@ -53,11 +53,26 @@
         once real code lands in Phase 2. -->
         <plugins>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>default-compile</id>
+                        <phase>none</phase>
+                    </execution>
+                    <execution>
+                        <id>default-testCompile</id>
+                        <phase>none</phase>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>net.alchim31.maven</groupId>
                 <artifactId>scala-maven-plugin</artifactId>
                 <version>${scala-maven-plugin.version}</version>
                 <configuration>
                     <scalaVersion>${scala213.version}</scalaVersion>
+                    <compileOrder>Mixed</compileOrder>
                 </configuration>
                 <executions>
                     <execution>
