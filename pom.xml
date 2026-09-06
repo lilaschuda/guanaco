@@ -44,6 +44,8 @@
         <module>guanaco-core</module>
         <module>guanaco-telemetry</module>
         <module>guanaco-kotlin</module>
+        <module>guanaco-scala_2.13</module>
+        <module>guanaco-scala_3</module>
     </modules>
 
     <properties>
@@ -62,6 +64,17 @@
         <micrometer.version>1.17.0</micrometer.version>
         <kotlin.version>2.4.10</kotlin.version>
         <kotlinx-coroutines.version>1.11.0</kotlinx-coroutines.version>
+
+        <!-- guanaco-scala_2.13 / guanaco-scala_3: two independent modules, not a cross-build.
+             scala3.version is deliberately pinned to 3.9.0 rather than the 3.10.x line - 3.9.0
+             sits inside the Scala team's own declared 3.8.1-3.9.0 stability/feature-freeze window
+             built around the 3.8 stdlib transition, while 3.10 is where that freeze lifts and the
+             stdlib is expected to start diverging from the 2.13-compatible baseline this module's
+             coexistence story depends on. Never use 3.8.0 specifically - real regression, fixed in
+             3.8.1, could cause JVM linkage errors when Scala 3 code executes Scala 2.13 libraries. -->
+        <scala213.version>2.13.18</scala213.version>
+        <scala3.version>3.9.0</scala3.version>
+        <scala-maven-plugin.version>4.9.10</scala-maven-plugin.version>
     </properties>
 
     <build>
@@ -96,6 +109,10 @@
                             <b>Guanaco API</b> &nbsp;|&nbsp; 
                             <a href="https://lilaschuda.github.io/guanaco/guanaco-kotlin/io.github.lilaschuda.guanaco.kotlin/index.html" target="_top" style="background:#7F52FF; color:white; padding:2px 8px; border-radius:4px; text-decoration:none; font-weight:bold;">
                                 Kotlin Extensions (KDoc) &raquo;
+                            </a>
+                            &nbsp;
+                            <a href="https://lilaschuda.github.io/guanaco/guanaco-scala_2.13/" target="_top" style="background:#DC322F; color:white; padding:2px 8px; border-radius:4px; text-decoration:none; font-weight:bold;">
+                                Scala 2.13 Extensions (Scaladoc) &raquo;
                             </a>
                             ]]>
                         </header>

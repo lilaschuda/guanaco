@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.lilaschuda</groupId>
+        <artifactId>guanaco-parent</artifactId>
+        <version>1.2.0</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>guanaco-scala_2.13</artifactId>
+    <packaging>jar</packaging>
+
+    <name>guanaco-scala_2.13</name>
+    <description>Optional Scala 2.13 ergonomics for Guanaco -- idiomatic factory functions, extension-style
+        outcome helpers, and CompletableFuture sugar for authoring routes and outcome types in Scala 2.13.
+        A separate, independent module from guanaco-scala_3 (not a cross-build) -- add this dependency only
+        if you author routes in Scala 2.13. guanaco-core never pulls it in transitively.</description>
+
+    <dependencies>
+        <!-- The contract this module wraps. -->
+        <dependency>
+            <groupId>io.github.lilaschuda</groupId>
+            <artifactId>guanaco</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-library</artifactId>
+            <version>${scala213.version}</version>
+        </dependency>
+        <!-- Test -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>${assertj.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <!-- scala-maven-plugin's default source layout (src/main/scala, src/test/scala) is used as-is -
+        unlike guanaco-kotlin, no <sourceDirectory> override should be needed here. To be confirmed
+        once real code lands in Phase 2. -->
+        <plugins>
+            <plugin>
+                <groupId>net.alchim31.maven</groupId>
+                <artifactId>scala-maven-plugin</artifactId>
+                <version>${scala-maven-plugin.version}</version>
+                <configuration>
+                    <scalaVersion>${scala213.version}</scalaVersion>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>scala-compile</id>
+                        <goals>
+                            <goal>compile</goal>
+                            <goal>testCompile</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>scala-doc</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>doc</goal>
+                        </goals>
+                        <configuration>
+                            <args>
+                                <arg>-doc-footer</arg>
+                                <arg>Guanaco Scala 2.13 API</arg>
+                                <arg>-d</arg>
+                                <arg>${project.basedir}/../target/reports/apidocs/guanaco-scala_2.13</arg>
+                            </args>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <configuration>
+                            <!-- javac's javadoc tool cannot process Scala source, same class of
+                                 problem confirmed empirically for guanaco-kotlin. Scaladoc generation
+                                 (scala:doc) and cross-linking is deferred to its own phase, not yet
+                                 wired here. -->
+                            <skip>true</skip>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
