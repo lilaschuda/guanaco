@@ -26,6 +26,12 @@
             <groupId>io.github.lilaschuda</groupId>
             <artifactId>guanaco</artifactId>
             <version>${project.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>com.fasterxml.jackson.core</groupId>
+                        <artifactId>jackson-annotations</artifactId>
+                    </exclusion>
+                </exclusions>
         </dependency>
         <dependency>
             <groupId>org.scala-lang</groupId>
@@ -47,6 +53,7 @@
         </dependency>
     </dependencies>
 
+    
     <build>
         <!-- scala-maven-plugin's default source layout (src/main/scala, src/test/scala) is used as-is -
              unlike guanaco-kotlin, no <sourceDirectory> override should be needed here. To be confirmed
@@ -66,15 +73,34 @@
                     </execution>
                 </executions>
             </plugin>
-            <!-- scala:doc is currently unusable for this module: scala-maven-plugin
-            4.9.10's doc goal generates Scala-2-vocabulary flags (-doc-format,
-            -doc-title) that Scala 3.9.0's scaladoc tool rejects outright -
-            confirmed by the bare goal (zero custom args) failing identically to
-            a fully-configured attempt. Not a flag-syntax issue on our end; a
-            real plugin/compiler version mismatch, and 4.9.10 is already the
-            latest scala-maven-plugin release, so there's no newer version to
-            try. Deferred to feature/guanaco-scala for investigation into a
-            doc-generation alternative - see that branch before revisiting. -->
+            <!-- Scala 3 doc generation: substantial progress made investigating a fork of
+                scala-maven-plugin (net.alchim31.maven:scala-maven-plugin:4.9.11-guanaco.1),
+                but not yet working end-to-end. Two real upstream bugs found and fixed in
+                the fork: (1) ScalaDocMojo unconditionally emits Scala-2 doc flags
+                (-doc-format/-doc-title) regardless of Scala major version - fixed via
+                Context.version() branching, confirmed working; Scala 3 needs -project:VALUE
+                (colon-joined single token, not addOption's space-separated form) instead.
+                (2) ArtifactIds4Scala3.apidocMainClassName() returns "dotty.tools.dotc.Main"
+                (the plain compiler) instead of the real doc tool "dotty.tools.scaladoc.Main" -
+                which itself lives in a separate artifact (org.scala-lang:scaladoc_3) the
+                plugin never declares as a dependency at all. Both required plain POM
+                configuration once identified (scaladocClassName, sourceDir pointed at
+                compiled .tasty output, an extra <dependencies> entry) - no further fork
+                changes needed for this part.
+                Currently blocked by a third, separate problem: dotty.tools.scaladoc's
+                optional static-site/blog renderer unconditionally initializes on every run
+                (HtmlRenderer's constructor touches StaticSiteContext.staticSiteRoot
+                regardless of whether -siteroot points at empty content), and that code
+                path needs a Jackson 3.x-era jackson-annotations release containing
+                JsonSerializeAs - which Guanaco's own Camel/Spring-driven jackson-annotations
+                2.22 does not have, causing a NoClassDefFoundError. scala-maven-plugin
+                unconditionally merges the full project compile classpath into the
+                scaladoc invocation with no opt-out (ScalaDocMojo.java:162), so Guanaco's
+                own real Jackson dependency shadows whatever scaladoc_3 needs. Excluding
+                jackson-annotations from the guanaco dependency in this module's own POM
+                was tried and had zero effect - the real conflicting classpath entry
+                was not conclusively identified. See SCALA_INTEROP.md for the full
+                write-up before continuing this investigation. -->
             <plugin>
                 <groupId>net.alchim31.maven</groupId>
                 <artifactId>scala-maven-plugin</artifactId>
@@ -91,6 +117,42 @@
                             <goal>testCompile</goal>
                         </goals>
                     </execution>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <goals>
+                            <goal>doc-jar</goal>
+                        </goals>
+<!--                        <configuration>
+                            <scaladocClassName>dotty.tools.scaladoc.Main</scaladocClassName>
+                            <sourceDir>${project.build.outputDirectory}</sourceDir>
+                            <includes>
+                                <include>**/*.tasty</include>
+                            </includes>
+                            <dependencies>
+                                <dependency>
+                                    <groupId>org.scala-lang</groupId>
+                                    <artifactId>scaladoc_3</artifactId>
+                                    <version>${scala3.version}</version>
+                                </dependency>
+                            </dependencies>
+                                <args>
+                                    <arg>-siteroot</arg>
+                                    <arg>${project.basedir}/target/scaladoc-empty-site</arg>
+                                </args>
+                        </configuration>-->
+                    </execution>
+<!--                    <execution>
+                        <id>ensure-siteroot-dir</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <mkdir dir="${project.basedir}/target/scaladoc-empty-site"/>
+                            </target>
+                        </configuration>
+                    </execution>-->
                 </executions>
             </plugin>
             <plugin>

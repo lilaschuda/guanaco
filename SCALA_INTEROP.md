@@ -131,14 +131,78 @@ with Scala's own documented, unresolved defect **SI-6803** in the external-doc p
 logic. `-doc-footer` works and is in use; `-doc-external-doc` was removed rather than left
 non-functional. See the comment in `guanaco-scala_2.13/pom.xml`.
 
-### 5. `guanaco-scala_3`: Scaladoc generation doesn't work at all
-`scala-maven-plugin` 4.9.10's `doc` goal generates Scala-2-vocabulary flags (`-doc-format`,
-`-doc-title`) that Scala 3.9.0's `scaladoc` tool rejects outright — confirmed by the bare
-goal (zero custom args) failing identically to a fully-configured attempt. This is a
-plugin/compiler version mismatch, not a configuration error; 4.9.10 is already
-`scala-maven-plugin`'s latest release. The `scala-doc` execution has been removed entirely
-from this module's POM. Next candidate experiment: bypass `scala-maven-plugin`'s `doc` goal
-specifically via `exec-maven-plugin` invoking `scaladoc`/`dotc` directly, before considering
-a broader build-tool question — sbt's own build needs comparably heavy custom doc-task
-wiring for Scala 3, suggesting this may be Scala 3.8/3.9-era `scaladoc` instability rather
-than a Maven-specific gap.
+### 5. `guanaco-scala_3`: Scaladoc generation doesn't work — three compounding, distinct problems found
+
+Investigated via a private fork of `scala-maven-plugin`
+(`net.alchim31.maven:scala-maven-plugin:4.9.11-guanaco.1`,
+`~/src/scala-maven-plugin`, branch `fix/scala3-doc-flags`).
+
+**Problem 1 — fixed and confirmed working:** `ScalaDocMojo.getScalaCommand()`
+unconditionally emits Scala-2-vocabulary doc flags (`-doc-format:html`,
+`-doc-title`) regardless of the target Scala version. Fixed by branching on
+`Context.version().major` (the plugin already has this exact machinery, used
+elsewhere for `apidocMainClassName()`). Scala 3's equivalent is `-project`,
+passed as a colon-joined single token (`-project:VALUE` via `addArgs`) —
+**not** `addOption("-project", value)`, which produces two space-separated
+tokens matching Scala 2's convention and gets rejected by dotc's arg parser.
+
+**Problem 2 — fixed via POM configuration alone, no further fork changes
+needed:** `ArtifactIds4Scala3.apidocMainClassName()` returns
+`"dotty.tools.dotc.Main"` — the plain compiler, not a documentation tool at
+all. This is why every doc-only flag was ever rejected: we were never running
+a doc generator, just the ordinary compiler with extra unrecognized flags,
+which explains the `.class`/`.tasty`-only output initially found in
+`target/site/scaladocs`. The real tool is `dotty.tools.scaladoc.Main`, in a
+separate artifact (`org.scala-lang:scaladoc_3`) the plugin never declares.
+Fixed via the mojo's own existing, undocumented-by-us-until-now configuration
+surface: `<scaladocClassName>`, `<sourceDir>` (pointed at
+`${project.build.outputDirectory}` with `<include>**/*.tasty</include>` —
+Scala 3's scaladoc consumes compiled TASTy metadata via TastyInspector, not
+raw `.scala` source, a fundamentally different input model than Scala 2's
+scaladoc), and the mojo's `<dependencies>` element for the extra
+`scaladoc_3` artifact.
+
+**Problem 3 — currently unresolved, stopped here:** with 1 and 2 fixed,
+`dotty.tools.scaladoc.Main` genuinely runs and reaches real HTML-rendering
+code (`HtmlRenderer`) — but crashes with `NoClassDefFoundError:
+com/fasterxml/jackson/annotation/JsonSerializeAs`. Root cause traced to
+`HtmlRenderer`'s constructor unconditionally initializing
+`StaticSiteContext.staticSiteRoot` (an optional blog/static-site feature we
+never asked for), which reaches `tools.jackson.dataformat.yaml.YAMLMapper` —
+Jackson **3.x**'s renamed namespace — whose `JacksonAnnotationIntrospector`
+needs a Jackson-3-era `jackson-annotations` release containing
+`JsonSerializeAs`. Guanaco's own Camel/Spring-driven dependency tree carries
+`jackson-annotations:2.22` (confirmed via `dependency:tree`), which appears
+to shadow whatever `scaladoc_3` actually needs. Confirmed via source
+(`ScalaDocMojo.java:162`) that the mojo unconditionally merges the full
+project compile classpath into the scaladoc invocation with **no opt-out
+parameter** — meaning Guanaco's own real dependencies can never be kept out
+of this process's classpath through configuration alone.
+
+**Tried and found insufficient:** excluding `jackson-annotations` from the
+`guanaco` dependency in `guanaco-scala_3`'s own POM — zero effect, identical
+crash. The actual conflicting classpath entry was not conclusively
+identified before stopping; it's possible the real culprit enters through a
+different dependency path than the one excluded, or Maven's mediation
+resolved differently than expected.
+
+**Why stopped here rather than continuing:** problems 1 and 2 are genuine,
+well-diagnosed, narrowly-scoped upstream bugs — exactly the kind of finding
+worth a `scala-maven-plugin` PR regardless of whether Guanaco itself ever
+gets full doc generation working. Problem 3 is a different category: a
+third-party tool's internal dependency conflict, several layers removed from
+anything about Guanaco's own code, requiring either a third round of fork
+surgery (filtering the merged classpath) or deeper `dependency:tree`
+archaeology to find the real shadowing entry. The effort-to-value ratio
+tipped past what's proportionate for this investigation's scope.
+
+**Next steps, if revisited:** (a) get a full, not just `grep`-filtered,
+`dependency:tree` output to find every Jackson-family artifact and its exact
+path into the classpath, not just `jackson-annotations`; (b) check whether
+`scaladoc_3`'s own POM declares a specific `jackson-annotations` version
+that dependency mediation should be preferring, and force it explicitly via
+`<dependencyManagement>` rather than only excluding the old one; (c) as a
+more invasive option, patch the fork to accept a flag suppressing the
+`project.getCompileClasspathElements()` merge entirely, since scaladoc's own
+resolved dependencies (`scaladoc_3` + transitives) should be sufficient
+without Guanaco's own runtime dependencies being present at all.

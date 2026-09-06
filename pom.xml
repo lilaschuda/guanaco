@@ -74,7 +74,7 @@
              3.8.1, could cause JVM linkage errors when Scala 3 code executes Scala 2.13 libraries. -->
         <scala213.version>2.13.18</scala213.version>
         <scala3.version>3.9.0</scala3.version>
-        <scala-maven-plugin.version>4.9.10</scala-maven-plugin.version>
+        <scala-maven-plugin.version>4.9.11-guanaco.1</scala-maven-plugin.version>
     </properties>
 
     <build>
